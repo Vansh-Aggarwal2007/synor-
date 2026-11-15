@@ -160,23 +160,20 @@ export class ResourceEngine {
     const wattage = this.state.getBreakerWattage();
     // Balanced hard-science power generation:
     // Gale Base has 10 kWe Kilopower Stirling fission reactor and solar tracking arrays
-    let generation = 105;
+    let generation = 115;
     if (this.state.galeCommissionedNodes.includes('rover_garage')) {
-      generation += 15; // Kilopower Stirling core online: 120W (steady surplus against 110W breaker draw)
+      generation += 15; // Kilopower Stirling core online adds steady surplus
     }
     if (this.state.currentChapter === 'act_2_arcadia' || this.state.currentChapter === 'act_4_jezero') {
-      // Mobile exploration: LREV Rover RTG and deployable solar wings provide 92W (steady realistic deficit)
-      generation = 92;
-    } else if (this.state.currentChapter === 'act_3_gale_return') {
-      // Return traverse: rover moving across terrain under battery/RTG load
-      generation = 95;
+      // Mobile exploration: LREV Rover RTG and deployable solar wings match nominal breaker draw
+      generation = 110;
     } else if (this.state.currentChapter === 'act_5_conjunction') {
       // Solar Conjunction dust storm deficit: atmospheric opacity tau=3.8 collapses solar input
-      generation = 75;
+      generation = 80;
     }
     const netFlow = generation - wattage.used;
-    // Calibrated consumption rate: ~0.15% to 0.22% per 3s tick (~3% to 4.5% power decrease per minute of mobile operations)
-    resources.power = Math.max(0, Math.min(100, resources.power + (netFlow * 0.012)));
+    // Slowed consumption rate: scales gently per 3s tick (0.005 multiplier avoids rapid battery drain)
+    resources.power = Math.max(0, Math.min(100, resources.power + (netFlow * 0.005)));
 
     // 4. Water & Hydro-Loop
     if (breakers.waterFiltration) {

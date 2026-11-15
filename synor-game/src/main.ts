@@ -15,7 +15,6 @@ import { ArcadiaFieldScene } from './scenes/ArcadiaFieldScene';
 import { JezeroFieldScene } from './scenes/JezeroFieldScene';
 import { JezeroShelterScene } from './scenes/JezeroShelterScene';
 import { EndingScene } from './scenes/EndingScene';
-import { gameState } from './state/GameState';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -50,7 +49,6 @@ const config: Phaser.Types.Core.GameConfig = {
 };
 
 window.addEventListener('DOMContentLoaded', () => {
-  (window as any).__PHASER_GAME__ = new Phaser.Game(config);
-  (window as any).__GAME_STATE__ = gameState;
+  new Phaser.Game(config);
 });
 
