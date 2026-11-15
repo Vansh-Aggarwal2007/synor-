@@ -4,6 +4,14 @@
  * - Full WASD / Arrow Key movement + Click-to-Walk + [E / SPACE] Interact + [M] Orbital Map
  * - 16-Bit Stepped Martian Parallax + Isometric Outpost Modules & Ares Rocket Lander
  * - Live NASA DONKI Space Weather, Mars Trek MOLA/SHARAD, and NASA OSDR Bio-Archive
+ *
+ * UI REVISION (core logic untouched):
+ * - Curiosity-referenced Gale terrain: layered Aeolis Mons strata, Bagnold dark dunes,
+ *   Yellowknife Bay mudstone + veins, Peace Vallis alluvial fan, JPL morse wheel tracks
+ * - Butterscotch Mastcam sky with blue sun halo, atmospheric horizon haze
+ * - Flowing wind-driven dust + dust devil, intensity derived from telemetry
+ *   (solar irradiance loss + DONKI radiation multiplier)
+ * - DONKI flare-class alert frame, commissioning checklist, site mini-map, keycap control bar
  */
 
 import Phaser from 'phaser';
@@ -45,6 +53,30 @@ const COLOR = {
   steel: 0x94a3b8,
 };
 
+/** Curiosity Mastcam-inspired Gale palette (butterscotch sky, ochre regolith, dark basaltic dunes) */
+const PAL = {
+  skyTop: 0x4a2819,
+  skyMid: 0xa9683f,
+  skyHorizon: 0xe8bb85,
+  sunHalo: 0x8fc3de,
+  sunCore: 0xfffbeb,
+  haze: 0xe3b27a,
+  dust: 0xdca86c,
+  dustVeil: 0xc98a52,
+  devil: 0xd9a572,
+  groundFar: 0xa9622f,
+  groundNear: 0x3a170b,
+  bedrock: 0x6e5f60,
+  bedrockHi: 0x8f7c76,
+  vein: 0xe9e1d3,
+  duneDark: 0x1f222c,
+  duneMid: 0x333746,
+  duneHi: 0x5b6174,
+  regolith: 0x7a3a1c,
+  // Mount Sharp strata (orange, tan, grey-brown, red, pale sulfate)
+  strata: [0xb8783f, 0xa5603a, 0xc79a68, 0x8d5a3c, 0x7d6a5e, 0xb07a4a, 0xd0a878],
+};
+
 const DEPTH = {
   sky: 10,
   stars: 11,
@@ -55,10 +87,15 @@ const DEPTH = {
   ridgeNear: 16,
   haze: 17,
   ground: 18,
+  groundHaze: 18.5,
   craters: 19,
+  groundDetail: 19.5,
+  devil: 20,
   conduits: 21,
   dust: 1100,
+  dustVeil: 1090,
   markers: 1200,
+  alert: 1995,
   hud: 2000,
   dialogShade: 5000,
   dialogPanel: 5010,
@@ -68,6 +105,16 @@ const DEPTH = {
 
 const hex = (n: number) => '#' + n.toString(16).padStart(6, '0');
 const snap = (v: number, step = PX) => Math.round(v / step) * step;
+
+const mix = (a: number, b: number, t: number): number => {
+  const ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
+  const br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
+  return (
+    (Math.round(ar + (br - ar) * t) << 16) |
+    (Math.round(ag + (bg - ag) * t) << 8) |
+    Math.round(ab + (bb - ab) * t)
+  );
+};
 
 type Pt = { x: number; y: number };
 type Gfx = Phaser.GameObjects.Graphics;
@@ -84,6 +131,9 @@ interface OutpostModule {
   id: string;
   category: string;
   name: string;
+  short: string;
+  locale: string;
+  curiosityRef: string;
   x: number;
   y: number;
   markerDy: number;
@@ -103,6 +153,17 @@ interface ModuleView {
   iconTxt: Phaser.GameObjects.Text;
   labelTxt: Phaser.GameObjects.Text;
   promptRing: Phaser.GameObjects.Arc;
+  glow: Phaser.GameObjects.Ellipse;
+  pointer: Phaser.GameObjects.Triangle;
+}
+
+interface DustP {
+  x: number;
+  y: number;
+  z: number; // 0 = far, 1 = near
+  s: number;
+  a: number;
+  ph: number;
 }
 
 function getGaleTelemetry() {
@@ -120,6 +181,39 @@ function getGaleTelemetry() {
     radiationMultiplier: typeof rawDonki.radiationMultiplier === 'number' ? rawDonki.radiationMultiplier : 1.85,
     isLive: Boolean(rawDonki.isLive),
   };
+}
+
+/**
+ * UI-only atmosphere model. Dust loading rises as Mars Trek solar irradiance drops
+ * (more suspended dust = less sunlight reaching the surface) and nudges up with the
+ * DONKI radiation multiplier so space-weather events read visually in the sky.
+ */
+function getDustModel() {
+  const t = getGaleTelemetry();
+  const loss = Phaser.Math.Clamp(1 - t.solarIrradianceFactor, 0, 0.6);
+  const boost = Math.max(0, t.radiationMultiplier - 1);
+  const level = Phaser.Math.Clamp(0.3 + loss * 6 + boost * 0.12, 0.2, 1);
+  const flareLetter = t.flareClass.charAt(0).toUpperCase();
+  const flareTier = flareLetter === 'X' ? 'SEVERE' : flareLetter === 'M' ? 'ELEVATED' : 'NOMINAL';
+  const flareColor = flareLetter === 'X' ? COLOR.red : flareLetter === 'M' ? COLOR.amber : COLOR.green;
+  const label =
+    level < 0.4 ? 'CLEAR SKY' : level < 0.62 ? 'DUSTY HAZE' : level < 0.82 ? 'DUST EVENT' : 'REGIONAL STORM';
+  return {
+    level,
+    tau: Number((0.35 + level * 1.9).toFixed(2)),
+    windMs: Math.round(4 + level * 16),
+    label,
+    flareLetter,
+    flareTier,
+    flareColor,
+  };
+}
+type DustModel = ReturnType<typeof getDustModel>;
+
+/** Sols since Curiosity landing (Bradbury Landing, 6 Aug 2012 05:17:57 UTC). Display only. */
+function curiosityRefSol(): number {
+  const landing = Date.UTC(2012, 7, 6, 5, 17, 57);
+  return Math.max(0, Math.floor((Date.now() - landing) / 88775244));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -169,13 +263,23 @@ function arcPoints(
   return pts;
 }
 
+/** Sci-fi corner brackets centered on (cx, cy). */
+function drawBrackets(g: Gfx, cx: number, cy: number, w: number, h: number, len: number, color: number, alpha = 0.9) {
+  const x0 = cx - w / 2, x1 = cx + w / 2, y0 = cy - h / 2, y1 = cy + h / 2;
+  g.lineStyle(2, color, alpha);
+  g.lineBetween(x0, y0, x0 + len, y0).lineBetween(x0, y0, x0, y0 + len);
+  g.lineBetween(x1, y0, x1 - len, y0).lineBetween(x1, y0, x1, y0 + len);
+  g.lineBetween(x0, y1, x0 + len, y1).lineBetween(x0, y1, x0, y1 - len);
+  g.lineBetween(x1, y1, x1 - len, y1).lineBetween(x1, y1, x1, y1 - len);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Isometric 16-Bit Outpost Structure Renderers
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** 1. CENTRAL HABITAT STATION (Top-Left Isometric Pressurized Module) */
 function drawCentralHabitat(g: Gfx) {
-  g.fillStyle(0x000000, 0.4).fillEllipse(0, 8, 280, 90);
+  g.fillStyle(0x000000, 0.4).fillEllipse(-30, 8, 300, 90);
 
   // Isometric foundation plinth
   const base: Pt[] = [
@@ -189,6 +293,9 @@ function drawCentralHabitat(g: Gfx) {
   // Main isometric habitat hull
   g.fillStyle(0xcbd5e1).fillRoundedRect(-104, -78, 208, 78, 14);
   g.fillStyle(0x94a3b8).fillRoundedRect(-104, -38, 208, 38, 8);
+  // Sun from the right: warm rim light + cool shade on the left
+  g.fillStyle(0xfff1d6, 0.22).fillRect(62, -72, 38, 66);
+  g.fillStyle(0x0f172a, 0.2).fillRect(-100, -74, 30, 66);
   g.lineStyle(2.5, 0x0f172a).strokeRoundedRect(-104, -78, 208, 78, 14);
 
   // Roof solar panel skylight & thermal unit
@@ -221,19 +328,32 @@ function drawCentralHabitat(g: Gfx) {
   for (let sy = 2; sy <= 28; sy += 7) {
     g.lineBetween(-26, sy, 26, sy);
   }
+
+  // Comms mast with status beacon
+  g.lineStyle(3, 0x475569).lineBetween(84, -76, 84, -122);
+  g.fillStyle(COLOR.red, 0.95).fillCircle(84, -124, 4);
+  g.lineStyle(2, 0x94a3b8).lineBetween(76, -112, 92, -112);
+
+  // Wind-blown regolith drifts against the plinth
+  g.fillStyle(0xb8763f, 0.4).fillEllipse(-96, 12, 70, 14);
+  g.fillStyle(0xb8763f, 0.3).fillEllipse(104, 6, 54, 10);
 }
 
 /** 2. LREV ROVER GARAGE & KILOPOWER BAY (Top-Center Hangar) */
 function drawRoverGarage(g: Gfx) {
-  g.fillStyle(0x000000, 0.4).fillEllipse(0, 6, 260, 82);
+  g.fillStyle(0x000000, 0.4).fillEllipse(-20, 6, 280, 82);
 
   // Hangar arch & blast bay
   g.fillStyle(0x475569).fillRoundedRect(-96, -74, 192, 74, 10);
+  g.fillStyle(0xfff1d6, 0.14).fillRect(56, -68, 34, 62);
+  g.fillStyle(0x0f172a, 0.22).fillRect(-92, -70, 22, 62);
   g.lineStyle(2.5, 0x0f172a).strokeRoundedRect(-96, -74, 192, 74, 10);
 
   // Open garage bay interior & ramp
   g.fillStyle(0x0f172a).fillRect(-48, -54, 96, 54);
   g.lineStyle(2, COLOR.amber).strokeRect(-48, -54, 96, 54);
+  // Interior work lights
+  g.fillStyle(COLOR.amber, 0.55).fillRect(-40, -50, 20, 4).fillRect(20, -50, 20, 4);
 
   const ramp: Pt[] = [
     { x: -48, y: 0 }, { x: 48, y: 0 }, { x: 68, y: 36 }, { x: -68, y: 36 }
@@ -242,19 +362,38 @@ function drawRoverGarage(g: Gfx) {
   fillPoly(g, ramp, true);
   g.lineStyle(2, 0x64748b);
   strokePoly(g, ramp, true);
+  for (let ry = 8; ry <= 30; ry += 8) {
+    g.lineStyle(1, 0x64748b, 0.7).lineBetween(-52 - ry * 0.4, ry, 52 + ry * 0.4, ry);
+  }
 
   // Kilopower Stirling Fission Mast & Solar Wing on right
   g.fillStyle(0x334155).fillRect(112, -98, 14, 98);
   g.fillStyle(COLOR.amber, 0.9).fillCircle(119, -104, 10);
+  g.fillStyle(0xfef3c7, 0.5).fillCircle(116, -107, 3);
   g.fillStyle(0x1e3a8a).fillRect(-76, -90, 152, 14);
   g.lineStyle(1.5, COLOR.cyan).strokeRect(-76, -90, 152, 14);
+  for (let px = -76; px <= 76; px += 19) {
+    g.lineStyle(1, COLOR.cyan, 0.5).lineBetween(px, -90, px, -76);
+  }
 }
 
 /** 3. ARES DESCENT ROCKET LANDER (Center-Right Tall Vertical Methalox Lander) */
 function drawAresLander(g: Gfx) {
+  // Long late-afternoon shadow cast away from the sun
+  g.fillStyle(0x000000, 0.2);
+  fillPoly(g, [{ x: -30, y: 8 }, { x: 30, y: 8 }, { x: -200, y: 30 }, { x: -270, y: 14 }], true);
+
   // Scorched landing pad & blast crater shadow
   g.fillStyle(0x2a0f04, 0.75).fillEllipse(0, 12, 220, 74);
   g.lineStyle(2, 0x7c2d12, 0.8).strokeEllipse(0, 12, 200, 64);
+  // Retro-propulsion scour streaks (Bradbury Landing blast zone)
+  for (let a = 0; a < 10; a++) {
+    const ang = (a / 10) * Math.PI * 2;
+    g.lineStyle(1.5, 0x2a0f04, 0.5).lineBetween(
+      Math.cos(ang) * 70, 12 + Math.sin(ang) * 22,
+      Math.cos(ang) * 130, 12 + Math.sin(ang) * 40
+    );
+  }
 
   // 4 Deployable carbon-composite landing legs
   g.lineStyle(5, 0x334155)
@@ -273,12 +412,14 @@ function drawAresLander(g: Gfx) {
   // Main Cylindrical fuselage
   g.fillStyle(0xe2e8f0).fillRect(-40, -156, 80, 102);
   g.fillStyle(0xcbd5e1).fillRect(10, -156, 30, 102);
+  g.fillStyle(0xfff1d6, 0.25).fillRect(26, -156, 14, 102);
   g.lineStyle(2.5, 0x0f172a).strokeRect(-40, -156, 80, 102);
 
   // Orange thermal tile band & NASA/ARES markings
   g.fillStyle(0xc2410c).fillRect(-40, -156, 80, 14);
   g.fillStyle(0x0f172a).fillRect(-26, -124, 18, 28);
   g.fillStyle(COLOR.cyan, 0.85).fillRect(10, -120, 16, 12);
+  g.fillStyle(0xc2410c).fillRect(-40, -62, 80, 6);
 
   // Conical Nose Fairing & Red Tip Cap
   const cone: Pt[] = [
@@ -305,11 +446,13 @@ function drawAresLander(g: Gfx) {
 
 /** 4. SUBSURFACE SCIENCE MODULE & DRILL RIG (Bottom-Left Lab + Parabolic Dish) */
 function drawScienceDrillRig(g: Gfx) {
-  g.fillStyle(0x000000, 0.42).fillEllipse(0, 10, 290, 94);
+  g.fillStyle(0x000000, 0.42).fillEllipse(-20, 10, 310, 94);
 
   // Main Lab Hull
   g.fillStyle(0xcbd5e1).fillRoundedRect(-110, -82, 220, 82, 12);
   g.fillStyle(0x94a3b8).fillRoundedRect(-110, -38, 220, 38, 8);
+  g.fillStyle(0xfff1d6, 0.2).fillRect(68, -76, 38, 70);
+  g.fillStyle(0x0f172a, 0.2).fillRect(-106, -78, 26, 70);
   g.lineStyle(2.5, 0x0f172a).strokeRoundedRect(-110, -82, 220, 82, 12);
 
   // Side SHARAD Drill Tower & Cryo-Tank (left)
@@ -329,6 +472,13 @@ function drawScienceDrillRig(g: Gfx) {
   // Right Roof Ventilation & Drill Derrick
   g.fillStyle(0x475569).fillRect(32, -110, 38, 28);
   g.lineStyle(2, 0x0f172a).strokeRect(32, -110, 38, 28);
+  // Derrick lattice (John Klein / Cumberland style drill stem)
+  g.lineStyle(2, 0x94a3b8)
+    .lineBetween(124, 0, 140, -96)
+    .lineBetween(156, 0, 140, -96)
+    .lineBetween(128, -30, 152, -30)
+    .lineBetween(133, -62, 147, -62);
+  g.fillStyle(COLOR.amber).fillCircle(140, -98, 4);
 
   // Lab Entry Door & Stairs
   g.fillStyle(0x0f172a).fillRect(-36, -54, 42, 50);
@@ -344,17 +494,26 @@ function drawScienceDrillRig(g: Gfx) {
 
 /** 5. REGOLITH STORM BUNKER & RADIATION VAULT (Bottom-Right Shielded Dome) */
 function drawRegolithBunker(g: Gfx) {
-  g.fillStyle(0x000000, 0.42).fillEllipse(0, 8, 270, 84);
+  g.fillStyle(0x000000, 0.42).fillEllipse(-14, 8, 280, 84);
 
   // Sintered Martian regolith berm
   const mound = arcPoints(0, 4, 124, 82, Math.PI, Math.PI * 2);
   g.fillStyle(0x5b2a0f);
   fillPoly(g, mound, true);
   const inner = arcPoints(0, 4, 108, 66, Math.PI, Math.PI * 2);
-  g.fillStyle(0x7c3a16, 0.9);
+  g.fillStyle(PAL.regolith, 0.92);
   fillPoly(g, inner, true);
+  // Sun-facing slope highlight
+  const lit = arcPoints(0, 4, 100, 60, Math.PI * 1.55, Math.PI * 2);
+  g.fillStyle(0xb8763f, 0.35);
+  fillPoly(g, lit, true);
   g.lineStyle(2.5, 0x2a0f04);
   strokePoly(g, mound, true);
+  // Rock armour texture
+  for (const [rx, ry] of [[-84, -6], [-62, -30], [58, -26], [88, -8], [-20, -62], [30, -64]]) {
+    g.fillStyle(0x3a1507, 0.8).fillRect(rx, ry, 10, 6);
+    g.fillStyle(0xa8693a, 0.5).fillRect(rx, ry, 10, 2);
+  }
 
   // Armored blast portal & hazard chevrons
   g.fillStyle(0x1e293b).fillRect(-34, -54, 68, 56);
@@ -363,6 +522,37 @@ function drawRegolithBunker(g: Gfx) {
     g.fillStyle(i % 2 ? COLOR.amber : 0x0f172a).fillRect(-32 + i * 8, -62, 8, 8);
   }
   g.fillStyle(COLOR.cyan, 0.85).fillRect(-14, -36, 28, 8);
+}
+
+/** Static Curiosity rover prop (landmark; not interactive). */
+function drawCuriosityProp(g: Gfx) {
+  g.fillStyle(0x000000, 0.35).fillEllipse(0, 8, 84, 16);
+  // Rocker-bogie + six wheels (side view)
+  g.lineStyle(3, 0x64748b)
+    .lineBetween(-28, -6, 0, -16)
+    .lineBetween(0, -16, 28, -6)
+    .lineBetween(-28, -6, -28, 2)
+    .lineBetween(28, -6, 28, 2);
+  for (const wx of [-30, 0, 30]) {
+    g.fillStyle(0x1f2937).fillCircle(wx, 0, 7);
+    g.lineStyle(1.5, 0x94a3b8).strokeCircle(wx, 0, 7);
+    g.fillStyle(0x94a3b8).fillRect(wx - 1, -1, 2, 2);
+  }
+  // Warm electronics body + deck
+  g.fillStyle(0xcbd5e1).fillRect(-32, -34, 64, 18);
+  g.fillStyle(0x94a3b8).fillRect(-32, -22, 64, 6);
+  g.lineStyle(2, 0x0f172a).strokeRect(-32, -34, 64, 18);
+  // MMRTG aft
+  g.fillStyle(0x334155).fillRect(32, -30, 18, 8);
+  for (let f = 0; f < 4; f++) g.fillStyle(0x64748b).fillRect(34 + f * 4, -34, 2, 4);
+  // Mast + Mastcam head
+  g.lineStyle(3, 0x94a3b8).lineBetween(-18, -34, -18, -58);
+  g.fillStyle(0xe2e8f0).fillRect(-26, -64, 16, 8);
+  g.fillStyle(COLOR.cyan, 0.9).fillRect(-24, -62, 4, 4).fillRect(-16, -62, 4, 4);
+  // Robotic arm
+  g.lineStyle(3, 0x94a3b8).lineBetween(-32, -26, -48, -16).lineBetween(-48, -16, -42, -8);
+  // Hi-gain antenna
+  g.fillStyle(0xe2e8f0).fillCircle(10, -40, 5);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -407,6 +597,17 @@ export class GaleBaseScene extends Phaser.Scene {
   private camOffsetY = 0;
   private leaving = false;
 
+  // ── UI / atmosphere (visual only) ──
+  private dust!: DustModel;
+  private dustGfx?: Gfx;
+  private dustParticles: DustP[] = [];
+  private dustVeil?: Phaser.GameObjects.Rectangle;
+  private devilGfx?: Gfx;
+  private devil = { active: false, x: 0, y: 0, dir: 1, h: 100, nextAt: 4000 };
+  private alertFrame?: Phaser.GameObjects.Rectangle;
+  private checklistRows: Array<{ dot: Phaser.GameObjects.Rectangle; status: Phaser.GameObjects.Text }> = [];
+  private miniGfx?: Gfx;
+
   constructor() {
     super({ key: 'GaleBaseScene' });
   }
@@ -426,6 +627,14 @@ export class GaleBaseScene extends Phaser.Scene {
     this.camOffsetX = 0;
     this.camOffsetY = 0;
     this.leaving = false;
+    this.dustGfx = undefined;
+    this.dustParticles = [];
+    this.dustVeil = undefined;
+    this.devilGfx = undefined;
+    this.devil = { active: false, x: 0, y: 0, dir: 1, h: 100, nextAt: 4000 };
+    this.alertFrame = undefined;
+    this.checklistRows = [];
+    this.miniGfx = undefined;
     this.removeWindowKeyListener();
   }
 
@@ -441,16 +650,20 @@ export class GaleBaseScene extends Phaser.Scene {
       gameState.resources.power = 65;
     }
 
+    this.dust = getDustModel();
     this.modules = this.buildModuleDefs();
 
     // Attach optional Blender backdrop, then always layer our 16-bit parallax + outpost modules
     attachBlenderSceneSlot(this, 'GALE_BASE', () => {});
     this.createProceduralOutpostWorld();
+    this.createAtmosphere();
 
     this.modules.forEach(m => this.createModuleMarker(m));
     this.createAstronautCharacter();
     this.createTopMissionHeader();
     this.createNasaTelemetryHud();
+    this.createCommissionChecklist();
+    this.createSiteMiniMap();
     this.createBottomControlBar();
     this.setupKeyboardControls();
 
@@ -556,6 +769,10 @@ export class GaleBaseScene extends Phaser.Scene {
         this.pulseGfx.fillStyle(col, 0.25).fillRect(px - 7, py - 7, 14, 14);
       }
     }
+
+    // 5. Atmosphere (wind-driven dust, dust devil) + HUD mini-map (visual only)
+    this.updateAtmosphere(time, delta);
+    this.updateMiniMap(time);
   }
 
   private setupKeyboardControls() {
@@ -572,7 +789,7 @@ export class GaleBaseScene extends Phaser.Scene {
     };
   }
 
-  // ───────────────────────────── 5 Outpost Modules (Matching Screenshot) ─────────────────────────────
+  // ───────────────────────────── 5 Outpost Modules (Curiosity-referenced sites) ─────────────────────────────
 
   private buildModuleDefs(): OutpostModule[] {
     const gale = getGaleTelemetry();
@@ -581,8 +798,12 @@ export class GaleBaseScene extends Phaser.Scene {
         id: 'hab_station',
         category: 'CREW QUARTERS & ECLSS',
         name: 'Central Habitat Station',
-        x: 340,
-        y: 440,
+        short: 'HABITAT',
+        locale: 'PEACE VALLIS · ALLUVIAL FAN APRON',
+        curiosityRef:
+          'Curiosity ref: Peace Vallis is an ancient stream channel feeding an alluvial fan on the Gale floor, evidence that liquid water once flowed into the crater.',
+        x: 400,
+        y: 450,
         markerDy: 120,
         desc: `Pressurized normoxic crew habitat at Gale Crater (${gale.elevationMeters}m MOLA). Run 101.3 kPa bulkhead seal verification and Sabatier CO2 scrubbers.`,
         effect: '+10% AIR  //  CO2 SCRUBBED TO 450 PPM',
@@ -600,8 +821,12 @@ export class GaleBaseScene extends Phaser.Scene {
         id: 'rover_garage',
         category: 'GARAGE & KILOPOWER BUS',
         name: 'LREV Garage & Kilopower Array',
-        x: 820,
-        y: 390,
+        short: 'KILOPOWER',
+        locale: 'GLEN TORRIDON · CLAY-BEARING UNIT',
+        curiosityRef:
+          'Curiosity ref: Glen Torridon, a clay-mineral-rich trough on lower Mount Sharp, was driven from late 2019, a natural staging corridor toward the foothills.',
+        x: 860,
+        y: 395,
         markerDy: 120,
         desc: `Couple 10 kWe Kilopower Stirling fission core and photovoltaic arrays (${Math.round(gale.solarIrradianceFactor * 100)}% Mars Trek irradiance) to main habitat power bus.`,
         effect: '+30% POWER  //  +15% THERMAL STABILITY',
@@ -619,8 +844,12 @@ export class GaleBaseScene extends Phaser.Scene {
         id: 'ares_lander',
         category: 'LANDING PLATFORM',
         name: 'Ares Descent Rocket Lander',
-        x: 1220,
-        y: 520,
+        short: 'ARES LANDER',
+        locale: 'BRADBURY LANDING · SOL 0',
+        curiosityRef:
+          'Curiosity ref: Curiosity touched down at Bradbury Landing in August 2012, lowered by sky-crane onto the floor of 154 km-wide Gale Crater.',
+        x: 1260,
+        y: 540,
         markerDy: 250,
         desc: 'The single-stage Ares lander and primary cargo platform that brought you through atmospheric entry to Gale Crater. Inspect methalox descent fuel cells and telemetry avionics.',
         effect: '+25% POWER  //  AVIONICS & FUEL CELLS LINKED',
@@ -638,8 +867,12 @@ export class GaleBaseScene extends Phaser.Scene {
         id: 'science_drill',
         category: 'SHARAD ICE & ASTROBIOLOGY',
         name: 'Subsurface Science Module & Drill Rig',
-        x: 340,
-        y: 820,
+        short: 'DRILL RIG',
+        locale: 'YELLOWKNIFE BAY · JOHN KLEIN & CUMBERLAND',
+        curiosityRef:
+          'Curiosity ref: its first drill holes (2013) in Yellowknife Bay mudstone revealed clay minerals and key elements for life, an ancient habitable lake environment.',
+        x: 400,
+        y: 830,
         markerDy: 175,
         desc: `Initialize SHARAD subsurface ice auger (${gale.subsurfaceIceDepthM}m depth) and closed-loop graywater distillation to fill perimeter water-wall radiation shields.`,
         effect: '+15% WATER RESERVE  //  HYDRO-SHIELD PRIMED',
@@ -656,8 +889,12 @@ export class GaleBaseScene extends Phaser.Scene {
         id: 'storm_bunker',
         category: 'RADIATION VAULT & SHIELDING',
         name: 'Regolith Storm Bunker',
-        x: 1540,
-        y: 780,
+        short: 'STORM BUNKER',
+        locale: 'BAGNOLD DUNES · LOWER MOUNT SHARP',
+        curiosityRef:
+          'Curiosity ref: the dark basaltic Bagnold Dunes were the first active dunes studied up close on another planet (2015–2016).',
+        x: 1560,
+        y: 790,
         markerDy: 115,
         desc: `Deploy autonomous dozers across ${gale.slopeDeg}° MOLA slope to heap 1.5m sintered regolith over the storm vault against NASA DONKI solar particle events.`,
         effect: 'SHELTER PROTECTION 95%  //  GCR ATTENUATED',
@@ -690,10 +927,11 @@ export class GaleBaseScene extends Phaser.Scene {
 
     const done = this.isDone(mod.id);
     const gale = getGaleTelemetry();
-    const PW = 720;
-    const PH = 440;
+    const PW = 760;
+    const PH = 470;
     const CX = W / 2;
     const CY = H / 2;
+    const accent = done ? COLOR.green : COLOR.cyan;
 
     // 1. Full-screen dim blocker (direct scene object, no container scroll offset)
     const shade = this.add
@@ -709,7 +947,7 @@ export class GaleBaseScene extends Phaser.Scene {
     // 2. Modal Chassis Panel (stops click propagation so clicking inside panel doesn't close it)
     const panelBg = this.add
       .rectangle(CX, CY, PW, PH, COLOR.panel, 0.98)
-      .setStrokeStyle(2, done ? COLOR.green : COLOR.cyan)
+      .setStrokeStyle(2, accent)
       .setDepth(DEPTH.dialogPanel)
       .setInteractive();
 
@@ -721,12 +959,24 @@ export class GaleBaseScene extends Phaser.Scene {
     );
 
     const topAccent = this.add
-      .rectangle(CX, CY - PH / 2 + 3, PW, 6, done ? COLOR.green : COLOR.cyan)
+      .rectangle(CX, CY - PH / 2 + 3, PW, 6, accent)
       .setDepth(DEPTH.dialogPanel + 1);
 
-    // 3. Category & Title (Matching Screenshot Layout)
+    const frame = this.add.graphics().setDepth(DEPTH.dialogPanel + 1);
+    drawBrackets(frame, CX, CY, PW - 16, PH - 16, 20, accent, 0.85);
+
+    const statusChip = this.add
+      .text(CX - PW / 2 + 26, CY - PH / 2 + 34, done ? '● OPERATIONAL' : '○ AWAITING COMMISSION', {
+        fontFamily: FONT_MONO,
+        fontSize: '11px',
+        color: hex(accent),
+      })
+      .setOrigin(0, 0.5)
+      .setDepth(DEPTH.dialogPanel + 1);
+
+    // 3. Category, Title & Curiosity locale
     const catTxt = this.add
-      .text(CX, CY - 172, `[ ${mod.category} ]`, {
+      .text(CX, CY - 205, `[ ${mod.category} ]`, {
         fontFamily: FONT_MONO,
         fontSize: '12px',
         color: hex(COLOR.amber),
@@ -736,7 +986,7 @@ export class GaleBaseScene extends Phaser.Scene {
       .setDepth(DEPTH.dialogPanel + 1);
 
     const titleTxt = this.add
-      .text(CX, CY - 136, mod.name.toUpperCase(), {
+      .text(CX, CY - 174, mod.name.toUpperCase(), {
         fontFamily: FONT_HEAD,
         fontSize: '22px',
         color: '#f8fafc',
@@ -744,8 +994,17 @@ export class GaleBaseScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(DEPTH.dialogPanel + 1);
 
+    const localeTxt = this.add
+      .text(CX, CY - 146, `◆ ${mod.locale}  //  ${Math.abs(gale.lat)}°${gale.lat < 0 ? 'S' : 'N'} ${gale.lon}°E`, {
+        fontFamily: FONT_MONO,
+        fontSize: '11px',
+        color: '#fcd9a8',
+      })
+      .setOrigin(0.5)
+      .setDepth(DEPTH.dialogPanel + 1);
+
     const descTxt = this.add
-      .text(CX, CY - 78, mod.desc, {
+      .text(CX, CY - 90, mod.desc, {
         fontFamily: FONT_BODY,
         fontSize: '17px',
         color: '#cbd5e1',
@@ -755,16 +1014,31 @@ export class GaleBaseScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(DEPTH.dialogPanel + 1);
 
+    // 3b. Curiosity reference strip
+    const factBar = this.add
+      .rectangle(CX - (PW - 100) / 2, CY - 10, 3, 46, COLOR.amber)
+      .setDepth(DEPTH.dialogPanel + 1);
+
+    const factTxt = this.add
+      .text(CX - (PW - 100) / 2 + 14, CY - 10, mod.curiosityRef, {
+        fontFamily: FONT_BODY,
+        fontSize: '14px',
+        color: '#fcd9a8',
+        wordWrap: { width: PW - 130 },
+      })
+      .setOrigin(0, 0.5)
+      .setDepth(DEPTH.dialogPanel + 1);
+
     // 4. NASA OSDR + DONKI + Mars Trek Science Brief Box
     const osdrBg = this.add
-      .rectangle(CX, CY + 4, PW - 80, 68, COLOR.panelInner)
+      .rectangle(CX, CY + 58, PW - 80, 68, COLOR.panelInner)
       .setStrokeStyle(1, COLOR.green, 0.6)
       .setDepth(DEPTH.dialogPanel + 1);
 
     const osdrHeader = this.add
       .text(
         CX - (PW - 80) / 2 + 14,
-        CY - 16,
+        CY + 38,
         `🧬 NASA OSDR [${mod.osdrId}]  //  DONKI FLARE: ${gale.flareClass} (${gale.radiationMultiplier}x)  //  EFFECT: ${mod.effect}`,
         {
           fontFamily: FONT_MONO,
@@ -776,7 +1050,7 @@ export class GaleBaseScene extends Phaser.Scene {
       .setDepth(DEPTH.dialogPanel + 2);
 
     const osdrNoteTxt = this.add
-      .text(CX - (PW - 80) / 2 + 14, CY + 12, mod.osdrNote, {
+      .text(CX - (PW - 80) / 2 + 14, CY + 66, mod.osdrNote, {
         fontFamily: FONT_BODY,
         fontSize: '14px',
         color: '#e2e8f0',
@@ -800,13 +1074,13 @@ export class GaleBaseScene extends Phaser.Scene {
 
     // 5. COMMISSION MODULE [ENTER] Button
     const commBtn = this.add
-      .rectangle(CX, CY + 92, 330, 46, done ? COLOR.greenDeep : COLOR.cyanDeep)
-      .setStrokeStyle(1.5, done ? COLOR.green : COLOR.cyan)
+      .rectangle(CX, CY + 136, 330, 46, done ? COLOR.greenDeep : COLOR.cyanDeep)
+      .setStrokeStyle(1.5, accent)
       .setDepth(DEPTH.dialogButtons)
       .setInteractive({ useHandCursor: true });
 
     const commTxt = this.add
-      .text(CX, CY + 92, done ? 'MODULE OPERATIONAL [ENTER]' : 'COMMISSION MODULE [ENTER]', {
+      .text(CX, CY + 136, done ? 'MODULE OPERATIONAL [ENTER]' : 'COMMISSION MODULE [ENTER]', {
         fontFamily: FONT_HEAD,
         fontSize: '13px',
         color: '#ffffff',
@@ -816,13 +1090,13 @@ export class GaleBaseScene extends Phaser.Scene {
 
     // 6. EXIT [ESC] Button
     const exitBtn = this.add
-      .rectangle(CX, CY + 154, 180, 36, 0x0f172a)
+      .rectangle(CX, CY + 190, 180, 36, 0x0f172a)
       .setStrokeStyle(1, COLOR.slate)
       .setDepth(DEPTH.dialogButtons)
       .setInteractive({ useHandCursor: true });
 
     const exitTxt = this.add
-      .text(CX, CY + 154, 'EXIT [ESC]', {
+      .text(CX, CY + 190, 'EXIT [ESC]', {
         fontFamily: FONT_MONO,
         fontSize: '12px',
         color: '#94a3b8',
@@ -957,9 +1231,14 @@ export class GaleBaseScene extends Phaser.Scene {
       shade,
       panelBg,
       topAccent,
+      frame,
+      statusChip,
       catTxt,
       titleTxt,
+      localeTxt,
       descTxt,
+      factBar,
+      factTxt,
       osdrBg,
       osdrHeader,
       osdrNoteTxt,
@@ -1059,30 +1338,85 @@ export class GaleBaseScene extends Phaser.Scene {
     }
   }
 
-  private createProceduralOutpostWorld() {
-    // 1. Martian Sky Gradient
-    this.paintBands(-120, -20, W + 240, HORIZON_Y + 30, 0x261009, 0xd98a4e, 16, DEPTH.sky);
+  /** Aeolis Mons: same stepped silhouette as steppedRidge, but with horizontal sedimentary strata. */
+  private strataRidge(
+    g: Gfx,
+    baseY: number,
+    pts: Array<[number, number]>,
+    rimHighlightColor: number,
+    hazeMix: number,
+    alpha = 1
+  ) {
+    const BAND = 18;
+    const palette = PAL.strata.map(c => mix(c, PAL.haze, hazeMix));
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [x0, y0] = pts[i];
+      const [x1, y1] = pts[i + 1];
+      for (let x = x0; x < x1; x += PX) {
+        const t = (x - x0) / Math.max(1, x1 - x0);
+        const topY = snap(Phaser.Math.Linear(y0, y1, t), PX);
+        let yy = topY;
+        while (yy < baseY) {
+          const next = Math.min(baseY, (Math.floor(yy / BAND) + 1) * BAND);
+          const idx = ((Math.floor(yy / BAND) % palette.length) + palette.length) % palette.length;
+          // Slight lighting falloff to the east (sun side is brighter)
+          const lit = mix(palette[idx], 0xfff1d6, Math.max(0, (x - 600) / 3200));
+          g.fillStyle(lit, alpha).fillRect(x, yy, PX + 1, next - yy + 1);
+          yy = next;
+        }
+        g.fillStyle(rimHighlightColor, alpha).fillRect(x, topY, PX + 1, PX);
+      }
+    }
+  }
 
-    // 2. Pixel Stars (Parallax 0.08)
+  private makeLandmarkLabel(x: number, y: number, text: string, toX: number, toY: number, depth: number) {
+    const c = this.add.container(x, y).setDepth(depth);
+    const gl = this.add.graphics();
+    gl.lineStyle(1.5, 0xfde68a, 0.55).lineBetween(0, 0, toX - x, toY - y);
+    gl.fillStyle(0xfde68a, 0.95).fillRect(toX - x - 3, toY - y - 3, 6, 6);
+    const t = this.add
+      .text(6, 0, text, { fontFamily: FONT_MONO, fontSize: '11px', color: '#fde68a' })
+      .setOrigin(0, 0.5)
+      .setShadow(1, 1, '#2a0f04', 2, false, true);
+    c.add([gl, t]);
+    return c;
+  }
+
+  private createProceduralOutpostWorld() {
+    const dl = this.dust.level;
+
+    // 1. Butterscotch Martian sky (Mastcam-style), dustier = warmer & flatter
+    this.paintBands(
+      -120, -20, W + 240, 190,
+      mix(PAL.skyTop, PAL.dustVeil, dl * 0.3), PAL.skyMid, 10, DEPTH.sky
+    );
+    this.paintBands(
+      -120, 170, W + 240, HORIZON_Y + 30 - 150,
+      PAL.skyMid, mix(PAL.skyHorizon, PAL.haze, dl * 0.35), 12, DEPTH.sky
+    );
+
+    // 2. Faint pixel stars (high altitude only, Parallax 0.08)
     const stars = this.add.graphics().setDepth(DEPTH.stars);
     const starRnd = new Phaser.Math.RandomDataGenerator(['gale-stars-v5']);
-    for (let i = 0; i < 42; i++) {
+    for (let i = 0; i < 26; i++) {
       const sx = snap(starRnd.between(-60, W + 60));
-      const sy = snap(starRnd.between(10, 170));
-      stars.fillStyle(0xfef3c7, starRnd.realInRange(0.25, 0.7)).fillRect(sx, sy, PX, PX);
+      const sy = snap(starRnd.between(10, 120));
+      stars.fillStyle(0xfef3c7, starRnd.realInRange(0.12, 0.38) * (1 - dl * 0.5)).fillRect(sx, sy, PX, PX);
     }
     this.addParallaxLayer(stars, 0.08, 0.04);
 
-    // 3. Pixel-Stepped Martian Sun (Parallax 0.16)
+    // 3. Pixel-Stepped Martian Sun with the signature blue halo (Parallax 0.16)
     const sun = this.add.graphics().setDepth(DEPTH.sun);
     for (const [r, col, a] of [
-      [110, 0xfde68a, 0.08],
-      [70, 0xfde68a, 0.16],
-      [22, 0xfffbeb, 0.92],
+      [170, PAL.sunHalo, 0.07],
+      [120, PAL.sunHalo, 0.12],
+      [86, 0xfde68a, 0.14],
+      [54, 0xfde68a, 0.24],
+      [22, PAL.sunCore, 0.94],
     ] as Array<[number, number, number]>) {
       for (let dy = -r; dy <= r; dy += PX) {
         const halfW = snap(Math.sqrt(Math.max(0, r * r - dy * dy)));
-        sun.fillStyle(col, a).fillRect(1560 - halfW, 155 + dy, halfW * 2, PX);
+        sun.fillStyle(col, a).fillRect(1440 - halfW, 165 + dy, halfW * 2, PX);
       }
     }
     this.addParallaxLayer(sun, 0.16, 0.08);
@@ -1096,28 +1430,39 @@ export class GaleBaseScene extends Phaser.Scene {
         [-120, 290], [120, 250], [340, 275], [560, 240], [820, 265],
         [1200, 255], [1480, 230], [1740, 255], [2040, 280],
       ],
-      0xb46436,
-      0xd98a56,
-      0.65
+      0xc9875a,
+      0xe3a878,
+      0.6
     );
     this.addParallaxLayer(craterRim, 0.28, 0.12);
 
-    // 5. Aeolis Mons / Mount Sharp Terraced Peak (Parallax 0.48)
+    // 5. Aeolis Mons / Mount Sharp, layered strata (Parallax 0.48)
     const mtSharp = this.add.graphics().setDepth(DEPTH.mountSharp);
-    this.steppedRidge(
+    this.strataRidge(
       mtSharp,
       HORIZON_Y + 20,
       [
-        [-120, 315], [160, 280], [410, 295], [640, 210], [820, 155],
-        [960, 115], [1120, 160], [1320, 215], [1560, 265], [1780, 245], [2040, 300],
+        [-120, 315], [160, 285], [330, 262], [470, 246], [560, 214], [700, 190],
+        [830, 150], [960, 128], [1080, 140], [1210, 196], [1340, 222],
+        [1500, 258], [1700, 262], [2040, 300],
       ],
-      0x96401e,
-      0xc86d3c,
-      0.96
+      0xe3b080,
+      0.22 + (1 - dl) * 0.0,
+      0.97
     );
     this.addParallaxLayer(mtSharp, 0.48, 0.2);
 
-    // 6. Mid-Ground Hematite Mesas (Parallax 0.72)
+    // Landmark callouts ride their own parallax layers
+    const sharpLabel = this.makeLandmarkLabel(
+      1010, 112, 'AEOLIS MONS // MT SHARP  ~5.5 KM', 960, 128, DEPTH.mountSharp + 0.5
+    );
+    this.addParallaxLayer(sharpLabel, 0.48, 0.2);
+    const ridgeLabel = this.makeLandmarkLabel(
+      520, 280, 'VERA RUBIN RIDGE', 470, 308, DEPTH.mesaMid + 0.5
+    );
+    this.addParallaxLayer(ridgeLabel, 0.72, 0.3);
+
+    // 6. Mid-Ground Hematite Mesas / Murray Buttes (Parallax 0.72)
     const mesaMid = this.add.graphics().setDepth(DEPTH.mesaMid);
     this.steppedRidge(
       mesaMid,
@@ -1126,13 +1471,13 @@ export class GaleBaseScene extends Phaser.Scene {
         [-120, 326], [200, 298], [460, 316], [740, 288],
         [1040, 310], [1360, 292], [1640, 314], [2040, 302],
       ],
-      0x782d11,
-      0x9e421d,
+      0x7a3a1e,
+      0xa05a30,
       0.98
     );
     this.addParallaxLayer(mesaMid, 0.72, 0.3);
 
-    // 7. Near Bagnold Basalt Ridge (Parallax 0.92)
+    // 7. Near Bagnold basalt ridge (Parallax 0.92)
     const nearRidge = this.add.graphics().setDepth(DEPTH.ridgeNear);
     this.steppedRidge(
       nearRidge,
@@ -1141,25 +1486,28 @@ export class GaleBaseScene extends Phaser.Scene {
         [-120, 338], [280, 318], [600, 334], [920, 320],
         [1300, 336], [1610, 318], [2040, 332],
       ],
-      0x541d09,
-      0x782d11,
+      0x4a2a20,
+      0x6a4234,
       1
     );
     this.addParallaxLayer(nearRidge, 0.92, 0.4);
 
     // Foreground Martian Terrain Plane
-    this.paintBands(0, HORIZON_Y, W, H - HORIZON_Y, 0x8f3916, 0x3b1507, 20, DEPTH.ground);
+    this.paintBands(0, HORIZON_Y, W, H - HORIZON_Y, PAL.groundFar, PAL.groundNear, 20, DEPTH.ground);
 
-    // Shallow Impact Craters & Regolith Boulders
+    // Shallow Impact Craters
     const craters = this.add.graphics().setDepth(DEPTH.craters);
     for (const c of [
       { x: 640, y: 580, rx: 56, ry: 22 },
-      { x: 1580, y: 790, rx: 78, ry: 36 },
-      { x: 980, y: 840, rx: 62, ry: 24 },
+      { x: 1580, y: 620, rx: 78, ry: 30 },
+      { x: 980, y: 860, rx: 62, ry: 24 },
     ]) {
       craters.fillStyle(0x5c200b, 0.85).fillEllipse(c.x, c.y, c.rx * 2.1, c.ry * 2.1);
       craters.fillStyle(0x361105, 0.92).fillEllipse(c.x, c.y + 2, c.rx * 1.6, c.ry * 1.4);
+      craters.fillStyle(0xc2864f, 0.35).fillEllipse(c.x + c.rx * 0.5, c.y - c.ry * 0.6, c.rx * 0.9, c.ry * 0.3);
     }
+
+    this.createGroundFeatures();
 
     // Umbilical Conduits Connecting Outpost Modules
     const conduits = this.add.graphics().setDepth(DEPTH.conduits);
@@ -1167,7 +1515,11 @@ export class GaleBaseScene extends Phaser.Scene {
     for (const m of this.modules.slice(1)) {
       conduits.lineStyle(4, 0x1e293b, 0.85).lineBetween(hub.x, hub.y, m.x, m.y);
       conduits.lineStyle(1.5, COLOR.cyan, 0.35).lineBetween(hub.x, hub.y, m.x, m.y);
+      conduits.fillStyle(0x334155, 0.95).fillRect(m.x - 6, m.y - 6, 12, 12);
+      conduits.lineStyle(1.5, COLOR.cyan, 0.6).strokeRect(m.x - 6, m.y - 6, 12, 12);
     }
+    conduits.fillStyle(0x334155, 0.95).fillRect(hub.x - 7, hub.y - 7, 14, 14);
+    conduits.lineStyle(1.5, COLOR.cyan, 0.6).strokeRect(hub.x - 7, hub.y - 7, 14, 14);
     this.pulseGfx = this.add.graphics().setDepth(DEPTH.conduits + 1);
 
     // Render all 5 Outpost Structures depth-sorted by Y
@@ -1175,22 +1527,304 @@ export class GaleBaseScene extends Phaser.Scene {
       const g = this.add.graphics({ x: m.x, y: m.y }).setDepth(m.y);
       m.draw(g);
     }
+
+    // Static Curiosity rover landmark (decorative)
+    const prop = this.add.graphics({ x: 700, y: 668 }).setDepth(668);
+    drawCuriosityProp(prop);
+  }
+
+  /** Site-specific terrain referenced from Curiosity's Gale Crater traverse. */
+  private createGroundFeatures() {
+    const rnd = new Phaser.Math.RandomDataGenerator(['gale-ground-v1']);
+    const g = this.add.graphics().setDepth(DEPTH.groundDetail);
+
+    // Peace Vallis alluvial fan: radiating distributary channels near the habitat
+    const apex = { x: 300, y: 392 };
+    g.fillStyle(0xc88650, 0.12);
+    fillPoly(g, [apex, { x: 620, y: 590 }, { x: 40, y: 600 }], true);
+    for (let i = 0; i < 9; i++) {
+      const ex = 60 + i * 70 + rnd.between(-16, 16);
+      const ey = 560 + rnd.between(-20, 30);
+      g.lineStyle(1.5, 0xe0a46c, 0.22).lineBetween(apex.x, apex.y, ex, ey);
+    }
+
+    // Yellowknife Bay: fractured pale-grey mudstone with white mineral veins
+    g.fillStyle(PAL.bedrock, 0.78).fillEllipse(410, 862, 620, 150);
+    g.fillStyle(PAL.bedrockHi, 0.55).fillEllipse(396, 852, 470, 100);
+    for (let i = 0; i < 26; i++) {
+      const a = rnd.realInRange(0, Math.PI * 2);
+      const r = Math.sqrt(rnd.realInRange(0.05, 1));
+      const px = 410 + Math.cos(a) * 270 * r;
+      const py = 862 + Math.sin(a) * 60 * r;
+      const ang = rnd.realInRange(0, Math.PI);
+      const len = rnd.between(14, 40);
+      g.lineStyle(1.5, PAL.vein, 0.4).lineBetween(
+        px, py, px + Math.cos(ang) * len, py + Math.sin(ang) * len * 0.4
+      );
+    }
+    // Drill-hole scars ("John Klein", "Cumberland")
+    for (const [dx, dy] of [[520, 880], [566, 868]]) {
+      g.fillStyle(0x2a1f20, 0.9).fillEllipse(dx, dy, 14, 6);
+      g.lineStyle(1.5, PAL.vein, 0.6).strokeEllipse(dx, dy, 20, 9);
+    }
+
+    // Bagnold Dunes: dark basaltic crescents on the lower right
+    this.drawDune(g, 1720, 690, 330, 54);
+    this.drawDune(g, 1450, 905, 400, 62);
+    this.drawDune(g, 1810, 880, 250, 46);
+    this.drawDune(g, 1260, 760, 220, 34);
+
+    // Scattered pebbles & boulders
+    for (let i = 0; i < 90; i++) {
+      const rx = rnd.between(30, W - 30);
+      const ry = rnd.between(HORIZON_Y + 40, H - 120);
+      const s = rnd.between(1, 3) * 2;
+      g.fillStyle(0x2c0f05, 0.7).fillRect(rx, ry, s + 2, s);
+      g.fillStyle(0xb9784a, 0.45).fillRect(rx, ry, s + 2, 2);
+    }
+    for (let i = 0; i < 12; i++) {
+      const rx = rnd.between(80, W - 80);
+      const ry = rnd.between(HORIZON_Y + 70, H - 140);
+      g.fillStyle(0x000000, 0.28).fillEllipse(rx - 6, ry + 6, 34, 9);
+      g.fillStyle(0x4a2a20).fillRoundedRect(rx - 14, ry - 12, 28, 16, 4);
+      g.fillStyle(0x8b5a3c).fillRect(rx - 10, ry - 12, 20, 4);
+    }
+
+    // Curiosity wheel tracks: JPL in morse (.--- .--. .-..), lander ➜ rover
+    this.drawMorseTracks(g, { x: 1230, y: 612 }, { x: 980, y: 770 }, { x: 740, y: 672 });
+  }
+
+  private drawDune(g: Gfx, cx: number, cy: number, w: number, h: number) {
+    const wind: Pt[] = [];
+    const N = 12;
+    for (let i = 0; i <= N; i++) {
+      const t = i / N;
+      wind.push({
+        x: snap(cx - w * 0.5 + t * w * 0.62, 2),
+        y: snap(cy - h * 0.98 * Math.pow(Math.sin((t * Math.PI) / 2), 1.4), 2),
+      });
+    }
+    const crest = wind[wind.length - 1];
+    g.fillStyle(PAL.duneMid, 0.95);
+    fillPoly(g, [...wind, { x: cx + w * 0.36, y: cy + 4 }, { x: cx - w * 0.5, y: cy + 6 }], true);
+    // Leeward slip face in shadow
+    g.fillStyle(PAL.duneDark, 0.95);
+    fillPoly(g, [crest, { x: cx + w * 0.36, y: cy + 4 }, { x: cx + w * 0.1, y: cy + 5 }], true);
+    // Crest highlight + wind ripples
+    g.lineStyle(2, PAL.duneHi, 0.85);
+    strokePoly(g, wind, false);
+    for (let k = 1; k <= 4; k++) {
+      g.lineStyle(1.2, PAL.duneHi, 0.3).lineBetween(
+        cx - w * 0.42 + k * 12, cy - k * h * 0.17,
+        cx + w * 0.08, cy - k * h * 0.17 + 2
+      );
+    }
+  }
+
+  private drawMorseTracks(g: Gfx, p0: Pt, p1: Pt, p2: Pt) {
+    // Sample a quadratic Bézier, then march a morse pattern along it by arc length
+    const samples: Pt[] = [];
+    for (let i = 0; i <= 240; i++) {
+      const t = i / 240;
+      const u = 1 - t;
+      samples.push({
+        x: u * u * p0.x + 2 * u * t * p1.x + t * t * p2.x,
+        y: u * u * p0.y + 2 * u * t * p1.y + t * t * p2.y,
+      });
+    }
+    const dot: Array<[number, boolean]> = [[4, true], [5, false]];
+    const dash: Array<[number, boolean]> = [[13, true], [5, false]];
+    const letterGap: Array<[number, boolean]> = [[12, false]];
+    const J = [...dot, ...dash, ...dash, ...dash];
+    const Pp = [...dot, ...dash, ...dash, ...dot];
+    const L = [...dot, ...dash, ...dot, ...dot];
+    const pattern = [...J, ...letterGap, ...Pp, ...letterGap, ...L, ...letterGap, ...letterGap];
+
+    let pi = 0;
+    let remain = pattern[0][0];
+    for (let i = 1; i < samples.length; i++) {
+      const a = samples[i - 1];
+      const b = samples[i];
+      const seg = Math.hypot(b.x - a.x, b.y - a.y);
+      let used = 0;
+      const nx = -(b.y - a.y) / (seg || 1);
+      const ny = (b.x - a.x) / (seg || 1);
+      while (used < seg) {
+        const step = Math.min(remain, seg - used);
+        if (pattern[pi][1] && step > 0) {
+          const mx = a.x + ((b.x - a.x) * (used + step / 2)) / (seg || 1);
+          const my = a.y + ((b.y - a.y) * (used + step / 2)) / (seg || 1);
+          for (const side of [-1, 1]) {
+            g.fillStyle(0x2c0f05, 0.55).fillRect(
+              snap(mx + nx * 15 * side, 1) - 1, snap(my + ny * 15 * side, 1) - 1,
+              Math.max(2, step), 3
+            );
+          }
+        }
+        used += step;
+        remain -= step;
+        if (remain <= 0.001) {
+          pi = (pi + 1) % pattern.length;
+          remain = pattern[pi][0];
+        }
+      }
+    }
+  }
+
+  // ───────────────────────────── Atmosphere: Wind-Driven Dust, Haze & Alerts ─────────────────────────────
+
+  private createAtmosphere() {
+    const dl = this.dust.level;
+
+    // Horizon haze: brightest at the horizon, fading up into the sky
+    const haze = this.add.graphics().setDepth(DEPTH.groundHaze);
+    for (let i = 0; i < 24; i++) {
+      const dy = HORIZON_Y - 90 + i * 5;
+      const peak = 1 - Math.abs(i - 17) / 17;
+      haze.fillStyle(PAL.haze, Math.max(0, peak) * (0.18 + dl * 0.4)).fillRect(0, dy, W, 5);
+    }
+    // Soft wash that thins out on the ground just below the horizon
+    for (let i = 0; i < 8; i++) {
+      haze.fillStyle(PAL.haze, (0.2 + dl * 0.2) * (1 - i / 8)).fillRect(0, HORIZON_Y + 30 + i * 6, W, 6);
+    }
+
+    // Global dust veil (non-interactive)
+    this.dustVeil = this.add
+      .rectangle(W / 2, H / 2, W, H, PAL.dustVeil, 0.03 + dl * 0.1)
+      .setDepth(DEPTH.dustVeil);
+
+    // Wind-streaked dust particles
+    this.dustGfx = this.add.graphics().setDepth(DEPTH.dust);
+    const count = Math.round(70 + dl * 150);
+    const rnd = new Phaser.Math.RandomDataGenerator(['gale-dust-v1']);
+    for (let i = 0; i < count; i++) {
+      const z = rnd.realInRange(0, 1);
+      this.dustParticles.push({
+        x: rnd.between(0, W),
+        y: HORIZON_Y - 10 + z * (H - HORIZON_Y + 10),
+        z,
+        s: 2 + Math.round(z * 3) * 2 / 2,
+        a: rnd.realInRange(0.12, 0.45) * (0.5 + z * 0.7),
+        ph: rnd.realInRange(0, Math.PI * 2),
+      });
+    }
+
+    this.devilGfx = this.add.graphics().setDepth(DEPTH.devil);
+
+    // DONKI flare-class alert frame (M = soft pulse, X = strong pulse)
+    if (this.dust.flareLetter === 'M' || this.dust.flareLetter === 'X') {
+      const strong = this.dust.flareLetter === 'X';
+      this.alertFrame = this.add
+        .rectangle(W / 2, H / 2, W - 10, H - 10)
+        .setStrokeStyle(strong ? 10 : 6, this.dust.flareColor, 1)
+        .setDepth(DEPTH.alert)
+        .setAlpha(0.06);
+      this.tweens.add({
+        targets: this.alertFrame,
+        alpha: strong ? 0.28 : 0.14,
+        duration: strong ? 900 : 1700,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+    }
+  }
+
+  private updateAtmosphere(time: number, delta: number) {
+    if (!this.dustGfx || !this.dust) return;
+    const dt = delta / 1000;
+    const lvl = this.dust.level;
+
+    // Gusting wind: slow swell + faster flutter
+    const gust = 0.75 + 0.25 * Math.sin(time * 0.0004) + 0.2 * Math.sin(time * 0.0013 + 1.7);
+    const wind = (40 + lvl * 260) * gust;
+
+    this.dustVeil?.setAlpha((0.03 + lvl * 0.1) * (0.85 + 0.3 * Math.sin(time * 0.0006)));
+
+    const g = this.dustGfx;
+    g.clear();
+    for (const p of this.dustParticles) {
+      p.x += wind * (0.35 + p.z * 0.95) * dt;
+      p.y += Math.sin(time * 0.002 + p.ph) * 10 * dt;
+      if (p.x > W + 40) {
+        p.x = -40;
+        p.y = HORIZON_Y - 10 + p.z * (H - HORIZON_Y + 10);
+      }
+      const streak = p.s * (1.5 + gust * lvl * 5 * (0.4 + p.z));
+      g.fillStyle(PAL.dust, p.a * (0.55 + 0.45 * gust)).fillRect(
+        snap(p.x, 2),
+        snap(p.y, 2),
+        Math.max(2, snap(streak, 2)),
+        p.s > 4 ? 4 : 2
+      );
+    }
+
+    this.updateDustDevil(time, dt);
+  }
+
+  private updateDustDevil(time: number, dt: number) {
+    const g = this.devilGfx;
+    if (!g) return;
+    const d = this.devil;
+    const lvl = this.dust.level;
+
+    if (!d.active) {
+      g.clear();
+      if (time > d.nextAt) {
+        d.active = true;
+        d.dir = Math.random() < 0.5 ? 1 : -1;
+        d.x = d.dir === 1 ? -120 : W + 120;
+        d.y = HORIZON_Y + 34 + Math.random() * 70;
+        d.h = 90 + Math.random() * 80;
+      }
+      return;
+    }
+
+    d.x += d.dir * (36 + lvl * 44) * dt;
+    if (d.x < -160 || d.x > W + 160) {
+      d.active = false;
+      d.nextAt = time + (14000 + Math.random() * 16000) / (0.5 + lvl);
+      g.clear();
+      return;
+    }
+
+    g.clear();
+    const segs = 16;
+    for (let i = 0; i < segs; i++) {
+      const t = i / segs;
+      const yy = d.y - t * d.h;
+      const wd = 6 + t * t * 34;
+      const off = Math.sin(time * 0.006 + t * 7) * 9 * t;
+      g.fillStyle(PAL.devil, 0.24 * (1 - t * 0.55)).fillRect(
+        snap(d.x + off - wd / 2, 2), snap(yy, 2), snap(wd, 2), 7
+      );
+      g.fillStyle(0x7a4528, 0.3 * (1 - t * 0.6)).fillRect(
+        snap(d.x + off - 3, 2), snap(yy, 2), 6, 7
+      );
+    }
+    // Ground-level dust skirt
+    g.fillStyle(PAL.devil, 0.2).fillEllipse(d.x, d.y + 4, 56, 12);
   }
 
   // ───────────────────────────── Module Beacons & Interaction Rings ─────────────────────────────
 
   private createModuleMarker(m: OutpostModule) {
-    // Ground interaction radius ring
+    // Ground interaction radius ring + operational glow
     const promptRing = this.add
       .circle(m.x, m.y + 18, 46, COLOR.cyan, 0.08)
       .setStrokeStyle(1.5, COLOR.cyan, 0.45)
       .setDepth(DEPTH.conduits + 2);
+
+    const glow = this.add
+      .ellipse(m.x, m.y + 14, 280, 84, COLOR.green, 0)
+      .setDepth(DEPTH.conduits + 1);
 
     const mx = m.x;
     const my = m.y - m.markerDy;
 
     const pulseRing = this.add.circle(0, 0, 20, COLOR.cyan, 0).setStrokeStyle(2, COLOR.cyan, 0.85);
     const ring = this.add.circle(0, 0, 18, COLOR.cyanDeep, 0.65).setStrokeStyle(2, COLOR.cyan);
+    const pointer = this.add.triangle(0, 31, -7, -6, 7, -6, 0, 6, COLOR.cyan, 0.9);
     const iconTxt = this.add
       .text(0, 0, '!', {
         fontFamily: FONT_HEAD,
@@ -1200,17 +1834,29 @@ export class GaleBaseScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     const labelTxt = this.add
-      .text(m.x, m.y + 54, m.name.toUpperCase(), {
+      .text(m.x, m.y + 58, `${m.name.toUpperCase()}\n◆ ${m.locale.split(' · ')[0]}`, {
         fontFamily: FONT_MONO,
         fontSize: '11px',
         color: hex(COLOR.cyan),
         backgroundColor: hex(COLOR.ink),
         padding: { x: 8, y: 3 },
+        align: 'center',
+        lineSpacing: 3,
       })
       .setOrigin(0.5)
       .setDepth(DEPTH.markers);
 
-    const marker = this.add.container(mx, my, [pulseRing, ring, iconTxt]).setDepth(DEPTH.markers);
+    const marker = this.add.container(mx, my, [pulseRing, ring, pointer, iconTxt]).setDepth(DEPTH.markers);
+
+    // Gentle float so beacons read as live
+    this.tweens.add({
+      targets: marker,
+      y: my - 6,
+      duration: 1300,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
 
     // Generous click zone covering structure + beacon + label
     const hitZone = this.add
@@ -1242,7 +1888,7 @@ export class GaleBaseScene extends Phaser.Scene {
       ease: 'Sine.easeOut',
     });
 
-    this.moduleViews.set(m.id, { marker, ring, pulseRing, iconTxt, labelTxt, promptRing });
+    this.moduleViews.set(m.id, { marker, ring, pulseRing, iconTxt, labelTxt, promptRing, glow, pointer });
     this.refreshModuleView(m.id);
   }
 
@@ -1256,6 +1902,8 @@ export class GaleBaseScene extends Phaser.Scene {
     v.iconTxt.setText(done ? '✓' : '!').setColor(done ? hex(COLOR.green) : '#ffffff');
     v.labelTxt.setColor(hex(col));
     v.promptRing.setStrokeStyle(1.5, col, 0.5);
+    v.pointer.setFillStyle(col, 0.9);
+    v.glow.setFillStyle(COLOR.green, done ? 0.1 : 0);
 
     if (done) {
       this.tweens.killTweensOf(v.pulseRing);
@@ -1387,8 +2035,11 @@ export class GaleBaseScene extends Phaser.Scene {
       ? 'ACT III: GALE CRATER — INGESTING ARCADIA DATA & RE-OUTFITTING LREV'
       : 'ACT I: GALE CRATER OUTPOST // COLONIZATION BASE COMMISSIONING';
 
+    const HW = 1100;
     const header = this.add.container(W / 2, 68).setDepth(DEPTH.hud);
-    const bg = this.add.rectangle(0, 0, 920, 52, COLOR.panel, 0.92).setStrokeStyle(1.5, COLOR.cyan, 0.6);
+    const bg = this.add.rectangle(0, 0, HW, 52, COLOR.panel, 0.92).setStrokeStyle(1.5, COLOR.cyan, 0.6);
+    const brackets = this.add.graphics();
+    drawBrackets(brackets, 0, 0, HW + 8, 60, 14, COLOR.cyan, 0.9);
 
     const hText = this.add
       .text(0, -10, headerTitle, {
@@ -1407,13 +2058,13 @@ export class GaleBaseScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    const track = this.add.rectangle(-440, 22, 880, 3, 0x1e293b).setOrigin(0, 0.5);
-    this.progressFill = this.add.rectangle(-440, 22, 880, 3, COLOR.cyan).setOrigin(0, 0.5);
+    const track = this.add.rectangle(-HW / 2 + 10, 22, HW - 20, 3, 0x1e293b).setOrigin(0, 0.5);
+    this.progressFill = this.add.rectangle(-HW / 2 + 10, 22, HW - 20, 3, COLOR.cyan).setOrigin(0, 0.5);
     this.progressFill.scaleX = 0.001;
 
-    header.add([bg, hText, this.statusBanner, track, this.progressFill]);
+    header.add([bg, brackets, hText, this.statusBanner, track, this.progressFill]);
 
-    // Top-Right [M] ORBITAL MAP Button (Matches Screenshot)
+    // Top-Right [M] ORBITAL MAP Button
     const mapBtn = this.add
       .rectangle(W - 135, 68, 210, 40, COLOR.panel, 0.92)
       .setStrokeStyle(1.5, COLOR.cyan, 0.8)
@@ -1482,6 +2133,8 @@ export class GaleBaseScene extends Phaser.Scene {
       ease: 'Cubic.easeOut',
     });
 
+    this.refreshChecklist();
+
     if (allDone && notAct3) {
       this.showTraverseButton();
     }
@@ -1489,27 +2142,39 @@ export class GaleBaseScene extends Phaser.Scene {
 
   private createNasaTelemetryHud() {
     const w = 340;
-    const h = 118;
+    const h = 210;
     const x = W - w / 2 - 30;
-    const y = 160;
+    const y = 112 + h / 2;
 
     const gale = getGaleTelemetry();
+    const d = this.dust;
     const cont = this.add.container(x, y).setDepth(DEPTH.hud);
     const bg = this.add.rectangle(0, 0, w, h, COLOR.panel, 0.88).setStrokeStyle(1, COLOR.cyan, 0.5);
+    const br = this.add.graphics();
+    drawBrackets(br, 0, 0, w + 6, h + 6, 12, COLOR.cyan, 0.85);
 
     const title = this.add
-      .text(-w / 2 + 14, -h / 2 + 16, 'NASA LIVE TELEMETRY // GALE', {
+      .text(-w / 2 + 14, -h / 2 + 16, 'NASA TELEMETRY // GALE', {
         fontFamily: FONT_HEAD,
         fontSize: '11px',
         color: hex(COLOR.cyan),
       })
       .setOrigin(0, 0.5);
 
+    const solTxt = this.add
+      .text(w / 2 - 14, -h / 2 + 16, `CURIOSITY SOL ${curiosityRefSol().toLocaleString('en-US')}`, {
+        fontFamily: FONT_MONO,
+        fontSize: '10px',
+        color: hex(COLOR.amber),
+      })
+      .setOrigin(1, 0.5);
+
+    const latStr = `${Math.abs(gale.lat)}°${gale.lat < 0 ? 'S' : 'N'}`;
     this.donkiHudText = this.add.text(
       -w / 2 + 14,
       -h / 2 + 36,
       `DONKI FLARE : Class ${gale.flareClass} (${gale.radiationMultiplier}x Flux)\n` +
-        `MARS TREK   : ${gale.lat}°N, ${gale.lon}°E (${gale.elevationMeters}m)\n` +
+        `MARS TREK   : ${latStr}, ${gale.lon}°E (${gale.elevationMeters}m)\n` +
         `SHARAD ICE  : ${gale.subsurfaceIceDepthM}m  |  SLOPE: ${gale.slopeDeg}°`,
       {
         fontFamily: FONT_MONO,
@@ -1519,20 +2184,184 @@ export class GaleBaseScene extends Phaser.Scene {
       }
     );
 
-    cont.add([bg, title, this.donkiHudText]);
+    // Divider
+    const divider = this.add.rectangle(0, -h / 2 + 100, w - 28, 1, COLOR.cyan, 0.25);
+
+    // Atmosphere readout (dust loading derived from irradiance + DONKI)
+    const atmoCol = d.level < 0.62 ? COLOR.amber : COLOR.red;
+    const atmoTxt = this.add
+      .text(-w / 2 + 14, -h / 2 + 116, `ATMOS : ${d.label}   τ ${d.tau}`, {
+        fontFamily: FONT_MONO,
+        fontSize: '11px',
+        color: hex(d.level < 0.4 ? COLOR.green : atmoCol),
+      })
+      .setOrigin(0, 0.5);
+
+    const barG = this.add.graphics();
+    const segs = 24;
+    const segW = (w - 28) / segs;
+    for (let i = 0; i < segs; i++) {
+      const on = i / segs < d.level;
+      const c = i < segs * 0.4 ? COLOR.green : i < segs * 0.75 ? COLOR.amber : COLOR.red;
+      barG.fillStyle(on ? c : 0x1e293b, on ? 0.95 : 0.9).fillRect(-w / 2 + 14 + i * segW, -h / 2 + 132, segW - 2, 7);
+    }
+
+    const windTxt = this.add
+      .text(-w / 2 + 14, -h / 2 + 156, `WIND   : ${d.windMs} m/s  ➜  W→E    REMS TYP: 750 Pa`, {
+        fontFamily: FONT_MONO,
+        fontSize: '11px',
+        color: '#cbd5e1',
+      })
+      .setOrigin(0, 0.5);
+
+    // Flare-class chip
+    const chipW = w - 28;
+    const chip = this.add
+      .rectangle(0, -h / 2 + 184, chipW, 22, d.flareColor, 0.14)
+      .setStrokeStyle(1, d.flareColor, 0.8);
+    const chipTxt = this.add
+      .text(
+        0,
+        -h / 2 + 184,
+        `SPE WATCH: ${d.flareLetter}-CLASS ${d.flareTier}  •  ${gale.isLive ? 'LIVE FEED' : 'REFERENCE DATA'}`,
+        { fontFamily: FONT_MONO, fontSize: '11px', color: hex(d.flareColor) }
+      )
+      .setOrigin(0.5);
+
+    cont.add([bg, br, title, solTxt, this.donkiHudText, divider, atmoTxt, barG, windTxt, chip, chipTxt]);
+  }
+
+  /** Left-side commissioning checklist (mirrors galeCommissionedNodes; read-only). */
+  private createCommissionChecklist() {
+    const w = 300;
+    const h = 46 + this.modules.length * 26 + 8;
+    const cont = this.add.container(30 + w / 2, 112 + h / 2).setDepth(DEPTH.hud);
+    const bg = this.add.rectangle(0, 0, w, h, COLOR.panel, 0.88).setStrokeStyle(1, COLOR.cyan, 0.5);
+    const br = this.add.graphics();
+    drawBrackets(br, 0, 0, w + 6, h + 6, 12, COLOR.cyan, 0.85);
+
+    const title = this.add
+      .text(-w / 2 + 14, -h / 2 + 16, 'OUTPOST COMMISSIONING', {
+        fontFamily: FONT_HEAD,
+        fontSize: '11px',
+        color: hex(COLOR.cyan),
+      })
+      .setOrigin(0, 0.5);
+
+    cont.add([bg, br, title]);
+
+    this.checklistRows = [];
+    this.modules.forEach((m, i) => {
+      const y = -h / 2 + 46 + i * 26;
+      const dot = this.add.rectangle(-w / 2 + 20, y, 8, 8, COLOR.slate);
+      const name = this.add
+        .text(-w / 2 + 36, y, m.short, { fontFamily: FONT_MONO, fontSize: '11px', color: '#cbd5e1' })
+        .setOrigin(0, 0.5);
+      const status = this.add
+        .text(w / 2 - 14, y, 'PENDING', { fontFamily: FONT_MONO, fontSize: '10px', color: '#94a3b8' })
+        .setOrigin(1, 0.5);
+      cont.add([dot, name, status]);
+      this.checklistRows.push({ dot, status });
+    });
+
+    this.refreshChecklist();
+  }
+
+  private refreshChecklist() {
+    if (this.checklistRows.length === 0) return;
+    this.modules.forEach((m, i) => {
+      const row = this.checklistRows[i];
+      if (!row) return;
+      const done = this.isDone(m.id);
+      row.dot.setFillStyle(done ? COLOR.green : COLOR.amber);
+      row.status.setText(done ? 'ONLINE' : 'PENDING').setColor(done ? hex(COLOR.green) : hex(COLOR.amber));
+    });
+  }
+
+  /** Bottom-right site map: module beacons + live astronaut position. */
+  private createSiteMiniMap() {
+    const w = 220;
+    const h = 112;
+    const cont = this.add.container(W - 30 - w / 2, 936 + h / 2).setDepth(DEPTH.hud);
+    const bg = this.add.rectangle(0, 0, w, h, COLOR.panel, 0.88).setStrokeStyle(1, COLOR.cyan, 0.5);
+    const br = this.add.graphics();
+    drawBrackets(br, 0, 0, w + 6, h + 6, 10, COLOR.cyan, 0.85);
+    const title = this.add
+      .text(-w / 2 + 12, -h / 2 + 12, 'SITE MAP // GALE FLOOR', {
+        fontFamily: FONT_HEAD,
+        fontSize: '9px',
+        color: hex(COLOR.cyan),
+      })
+      .setOrigin(0, 0.5);
+    const mapBg = this.add.rectangle(0, 10, w - 24, 76, 0x2a1209, 0.9).setStrokeStyle(1, COLOR.slate, 0.6);
+    this.miniGfx = this.add.graphics();
+    cont.add([bg, br, title, mapBg, this.miniGfx]);
+  }
+
+  private updateMiniMap(time: number) {
+    const g = this.miniGfx;
+    if (!g || !this.astronaut) return;
+    const mw = 196;
+    const mh = 68;
+    const tx = (x: number) => (x / W) * mw - mw / 2;
+    const ty = (y: number) => ((y - 360) / 580) * mh - mh / 2 + 10;
+
+    g.clear();
+    // Dune field hint (Bagnold) + mudstone hint (Yellowknife)
+    g.fillStyle(PAL.duneMid, 0.7).fillRect(tx(1250), ty(690), tx(1840) - tx(1250), ty(930) - ty(690));
+    g.fillStyle(PAL.bedrockHi, 0.55).fillRect(tx(110), ty(800), tx(700) - tx(110), ty(920) - ty(800));
+
+    for (const m of this.modules) {
+      const done = this.isDone(m.id);
+      const near = this.nearestModule?.id === m.id;
+      const c = done ? COLOR.green : COLOR.cyan;
+      g.fillStyle(c, 0.95).fillRect(tx(m.x) - 4, ty(m.y) - 4, 8, 8);
+      if (near) g.lineStyle(1.5, 0xffffff, 0.9).strokeRect(tx(m.x) - 7, ty(m.y) - 7, 14, 14);
+    }
+
+    const blink = 0.55 + 0.45 * Math.sin(time * 0.008);
+    g.fillStyle(COLOR.amber, blink).fillCircle(tx(this.astronaut.x), ty(this.astronaut.y), 3.5);
   }
 
   private createBottomControlBar() {
     const bar = this.add.container(W / 2, 1018).setDepth(DEPTH.hud);
-    const bg = this.add.rectangle(0, 0, 740, 34, COLOR.ink, 0.92).setStrokeStyle(1, COLOR.slate, 0.6);
-    const txt = this.add
-      .text(0, 0, '[WASD / ARROWS] EXPLORE   •   [E / SPACE] INTERACT   •   [M] MARS TRAVEL MAP', {
-        fontFamily: FONT_MONO,
-        fontSize: '12px',
-        color: hex(COLOR.cyan),
-      })
-      .setOrigin(0.5);
-    bar.add([bg, txt]);
+
+    const items: Array<[string, string]> = [
+      ['WASD / ARROWS', 'EXPLORE'],
+      ['E / SPACE', 'INTERACT'],
+      ['M', 'MARS TRAVEL MAP'],
+      ['CLICK', 'WALK TO POINT'],
+    ];
+
+    const entries = items.map(([k, l]) => {
+      const kt = this.add
+        .text(0, 0, k, { fontFamily: FONT_MONO, fontSize: '11px', color: hex(COLOR.ink) })
+        .setOrigin(0, 0.5);
+      const lt = this.add
+        .text(0, 0, l, { fontFamily: FONT_MONO, fontSize: '12px', color: '#cbd5e1' })
+        .setOrigin(0, 0.5);
+      return { kt, lt };
+    });
+
+    const GAP = 30;
+    const totalW =
+      entries.reduce((s, e) => s + (e.kt.width + 16) + 8 + e.lt.width, 0) + (entries.length - 1) * GAP;
+
+    const bg = this.add
+      .rectangle(0, 0, totalW + 48, 34, COLOR.ink, 0.92)
+      .setStrokeStyle(1, COLOR.slate, 0.6);
+
+    const nodes: Phaser.GameObjects.GameObject[] = [bg];
+    let cx = -totalW / 2;
+    for (const e of entries) {
+      const capW = e.kt.width + 16;
+      const cap = this.add.rectangle(cx + capW / 2, 0, capW, 20, COLOR.cyan, 0.92);
+      e.kt.setPosition(cx + 8, 0);
+      e.lt.setPosition(cx + capW + 8, 0);
+      nodes.push(cap, e.kt, e.lt);
+      cx += capW + 8 + e.lt.width + GAP;
+    }
+    bar.add(nodes);
   }
 
   // ───────────────────────────── Scene Transitions ─────────────────────────────
@@ -1587,6 +2416,16 @@ export class GaleBaseScene extends Phaser.Scene {
 
     c.add([bg, txt, resetBg, resetTxt]);
     this.traverseBtn = c;
+
+    // Attention pulse on the unlocked traverse button
+    this.tweens.add({
+      targets: bg,
+      alpha: { from: 1, to: 0.78 },
+      duration: 900,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
 
     bg.on('pointerdown', () => this.openOrbitalMap());
 
