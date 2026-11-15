@@ -1072,7 +1072,7 @@ export class GaleBaseScene extends Phaser.Scene {
       })
       .catch(() => {});
 
-    // 5. COMMISSION MODULE [ENTER] Button
+    // 5. COMMISSION MODULE [ENTER] Button......
     const commBtn = this.add
       .rectangle(CX, CY + 136, 330, 46, done ? COLOR.greenDeep : COLOR.cyanDeep)
       .setStrokeStyle(1.5, accent)
