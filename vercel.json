@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "cd synor-game && npm install && npm run build",
+  "outputDirectory": "synor-game/dist",
+  "cleanUrls": true
+}
