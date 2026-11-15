@@ -41,7 +41,7 @@ import { transitionToScene, fadeSceneIn } from '../utils/SceneTransition';
  * Marineris, Gale, Jezero etc. sit where they sit on the real planet.
  *
  * Two flat, 2D navigation-style layers are produced from ONE elevation model:
- *   - `<prefix>_real` : terrain classes (navy -> teal -> slate -> amber), topo outlines, crater rings
+ *   - `<prefix>_real` : terrain classes (brown -> orange -> yellow -> beige), topo outlines, crater rings
  *   - `<prefix>_mola` : smooth elevation gradient in the same palette with 2 km contour lines
  *
  * If you drop a real NASA Mars Trek / MOLA equirectangular image in the game
@@ -143,15 +143,15 @@ export function eastLonToProjection(lonE: number, w: number, h: number): number 
 /* ------------------------------------------------------------------------- */
 
 const MOLA_STOPS: Array<[number, number, number, number]> = [
-  [-8, 7, 30, 58],
-  [-4, 12, 74, 110],
-  [-1, 14, 116, 144],
-  [1, 28, 138, 143],
-  [3, 51, 78, 104],
-  [6, 120, 62, 24],
-  [11, 217, 119, 6],
-  [16, 251, 191, 36],
-  [21, 254, 243, 199]
+  [-8, 61, 32, 18],
+  [-4, 107, 58, 30],
+  [-1, 150, 84, 38],
+  [1, 201, 124, 52],
+  [3, 224, 160, 72],
+  [6, 238, 196, 96],
+  [11, 244, 218, 140],
+  [16, 246, 232, 180],
+  [21, 252, 246, 225]
 ];
 
 export function molaColorRGB(km: number): [number, number, number] {
@@ -173,20 +173,20 @@ export function molaColorHex(km: number): number {
   return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b);
 }
 
-/** Flat terrain classes for the 2D navigation layer (UI palette: navy -> teal -> slate -> amber). */
+/** Flat terrain classes for the 2D navigation layer (warm palette: brown -> orange -> yellow -> beige). */
 export const BANDS: Array<{ max: number; rgb: [number, number, number]; name: string }> = [
-  { max: -6, rgb: [7, 30, 58], name: 'DEEP BASIN' },
-  { max: -4, rgb: [10, 53, 88], name: 'BASIN FLOOR' },
-  { max: -2, rgb: [12, 74, 110], name: 'NORTHERN PLAINS' },
-  { max: 0, rgb: [14, 106, 134], name: 'LOWLANDS' },
-  { max: 1.5, rgb: [28, 138, 143], name: 'TRANSITION ZONE' },
-  { max: 3, rgb: [51, 78, 104], name: 'CRATERED HIGHLANDS' },
-  { max: 5, rgb: [71, 95, 120], name: 'ELEVATED HIGHLANDS' },
-  { max: 9, rgb: [146, 64, 14], name: 'VOLCANIC RISE' },
-  { max: 14, rgb: [217, 119, 6], name: 'VOLCANIC FLANKS' },
-  { max: 99, rgb: [251, 191, 36], name: 'SUMMITS' }
+  { max: -6, rgb: [61, 32, 18], name: 'DEEP BASIN' },
+  { max: -4, rgb: [92, 51, 26], name: 'BASIN FLOOR' },
+  { max: -2, rgb: [128, 70, 34], name: 'NORTHERN PLAINS' },
+  { max: 0, rgb: [166, 94, 44], name: 'LOWLANDS' },
+  { max: 1.5, rgb: [201, 124, 52], name: 'TRANSITION ZONE' },
+  { max: 3, rgb: [224, 160, 72], name: 'CRATERED HIGHLANDS' },
+  { max: 5, rgb: [238, 196, 96], name: 'ELEVATED HIGHLANDS' },
+  { max: 9, rgb: [244, 218, 140], name: 'VOLCANIC RISE' },
+  { max: 14, rgb: [236, 214, 172], name: 'VOLCANIC FLANKS' },
+  { max: 99, rgb: [250, 240, 215], name: 'SUMMITS' }
 ];
-export const ICE_RGB: [number, number, number] = [224, 242, 254];
+export const ICE_RGB: [number, number, number] = [255, 255, 250];
 
 /* ------------------------------------------------------------------------- */
 /*  Noise                                                                     */
@@ -492,7 +492,6 @@ export function generateMarsTerrainTextures(
   const L = [-0.5, -0.5, 0.7];
   const Ll = Math.hypot(L[0], L[1], L[2]);
   const Lx = L[0] / Ll, Ly = L[1] / Ll, Lz = L[2] / Ll;
-  const lighten = (c: number, t: number) => c + (255 - c) * t;
 
   for (let y = 0; y < H; y++) {
     const ym = y > 0 ? y - 1 : y;
@@ -536,10 +535,10 @@ export function generateMarsTerrainTextures(
         let g = band.rgb[1] * cel * tint;
         let b = band.rgb[2] * cel * tint;
         if (bi !== bandArr[iL] || bi !== bandArr[iR] || bi !== bandArr[iU] || bi !== bandArr[iD]) {
-          r = lighten(r, 0.28); g = lighten(g, 0.28); b = lighten(b, 0.28);
+          r *= 0.74; g *= 0.74; b *= 0.74;
         }
-        if (cm === 2) { r = lighten(r, 0.4); g = lighten(g, 0.4); b = lighten(b, 0.4); }
-        else if (cm === 1) { r *= 0.88; g *= 0.88; b *= 0.88; }
+        if (cm === 2) { r *= 0.6; g *= 0.6; b *= 0.6; }
+        else if (cm === 1) { r *= 0.94; g *= 0.94; b *= 0.94; }
         if (ice > 0) {
           r += (ICE_RGB[0] - r) * ice * 0.95;
           g += (ICE_RGB[1] - g) * ice * 0.95;
@@ -555,10 +554,10 @@ export function generateMarsTerrainTextures(
         let r = cr * mm, g = cg * mm, b = cb * mm;
         const c = contourArr[i];
         if (c !== contourArr[iL] || c !== contourArr[iR] || c !== contourArr[iU] || c !== contourArr[iD]) {
-          r = lighten(r, 0.2); g = lighten(g, 0.2); b = lighten(b, 0.2);
+          r *= 0.8; g *= 0.8; b *= 0.8;
         }
-        if (cm === 2) { r = lighten(r, 0.32); g = lighten(g, 0.32); b = lighten(b, 0.32); }
-        else if (cm === 1) { r *= 0.92; g *= 0.92; b *= 0.92; }
+        if (cm === 2) { r *= 0.65; g *= 0.65; b *= 0.65; }
+        else if (cm === 1) { r *= 0.95; g *= 0.95; b *= 0.95; }
         if (ice > 0) {
           r += (ICE_RGB[0] - r) * ice * 0.8;
           g += (ICE_RGB[1] - g) * ice * 0.8;
@@ -590,11 +589,11 @@ const NASA_TEXTURE_KEY = 'mars_mola_nasa';
 const NASA_TEXTURE_PATH = 'assets/maps/mars_mola_color_relief.jpg';
 
 const KIND_COLOR: Record<FeatureKind, string> = {
-  volcano: '#fbbf24',
-  crater: '#e2e8f0',
+  volcano: '#fca5a5',
+  crater: '#f8fafc',
   basin: '#7dd3fc',
-  canyon: '#fb923c',
-  region: '#94a3b8',
+  canyon: '#fdba74',
+  region: '#e2e8f0',
   lander: '#fde047',
   cap: '#e0f2fe'
 };
@@ -608,6 +607,50 @@ interface PlacedFeature {
   x: number; // local map coords
   y: number;
 }
+
+/** Kid-friendly fun facts shown when a landmark is hovered / clicked. */
+const FEATURE_FACTS: Record<string, string> = {
+  'Olympus Mons': 'The tallest volcano in the whole solar system, about 2.5 times taller than Mount Everest!',
+  'Ascraeus Mons': 'One of three giant volcanoes in a row called the Tharsis Montes.',
+  'Pavonis Mons': 'This giant volcano sits almost exactly on the Martian equator.',
+  'Arsia Mons': 'It has a crater at the top, called a caldera, that is about 110 km wide!',
+  'Alba Mons': 'One of the widest volcanoes in the solar system, but so gently sloped you would hardly notice climbing it.',
+  'Elysium Mons': "A big volcano in the Elysium region. NASA's InSight lander parked on a plain in the same region.",
+  'Hellas Planitia': 'A giant crater made by a space rock, about 2,300 km wide. It is the deepest place on Mars, so the air is thicker down there!',
+  'Argyre Planitia': 'Another giant crash crater, about 1,800 km wide. Frost can cover it in winter.',
+  'Isidis Planitia': "A huge crater about 1,500 km wide. The Perseverance rover's home, Jezero Crater, sits on its edge!",
+  'Utopia Planitia': "A huge flat plain. NASA's Viking 2 lander and China's Zhurong rover both landed here.",
+  'Valles Marineris': 'A canyon system that would stretch almost all the way across the United States, and up to 4 times deeper than the Grand Canyon!',
+  'Noctis Labyrinthus': "Its name means 'Labyrinth of the Night', a maze of deep valleys.",
+  'Syrtis Major': 'A dark patch that astronomers spotted through telescopes from Earth way back in the 1600s!',
+  'Chryse Planitia': 'Viking 1 landed here, and Pathfinder landed nearby, in a region carved by ancient floods.',
+  'Acidalia Planitia': 'A big dark northern plain. Scientists think an ocean may once have covered Mars\u2019s northern lowlands.',
+  'Arabia Terra': 'A huge highland covered in craters. It is one of the oldest parts of Mars.',
+  'Amazonis Planitia': 'One of the smoothest plains on all of Mars!',
+  'Solis Planum': 'A high plateau of old lava next to Valles Marineris.',
+  'Terra Cimmeria': 'Old, crater-covered highlands in the southern half of Mars.',
+  'Tempe Terra': 'A rugged highland cut by cracks and valleys.',
+  'Schiaparelli': 'Named after Giovanni Schiaparelli, an Italian astronomer who drew early maps of Mars.',
+  'Huygens': 'Named after Christiaan Huygens, who made one of the first drawings of Mars in 1659.',
+  'Herschel': 'Named after William Herschel, who also discovered the planet Uranus!',
+  'Gusev': 'The Spirit rover explored this crater, which scientists think may once have held a lake.',
+  'Lyot': 'Scientists have found signs that water once flowed around this crater.',
+  'Cassini': 'Named after Giovanni Cassini, who also studied the rings of Saturn!',
+  'Korolev': 'This crater holds a giant mound of ice all year round.',
+  'Galle': "From space this crater looks like a smiley face. It's nicknamed the 'Happy Face' crater!",
+  'Holden': 'Scientists once considered this crater as a landing site for a rover.',
+  'Eberswalde': 'It has an ancient river delta, a place where a river once flowed into a lake!',
+  'Hale': 'Named after the American astronomer George Ellery Hale.',
+  'Viking 1': 'In 1976 it became the first successful US lander on Mars and kept working for over six years!',
+  'Viking 2': 'It landed in 1976 and sent back pictures of frost on the ground.',
+  'Pathfinder': 'It carried a tiny rover called Sojourner, about the size of a microwave oven!',
+  'Opportunity': 'It was planned to work for 90 days, but it explored Mars for nearly 15 years!',
+  'Phoenix': 'It dug into the ground near the north pole and found water ice!',
+  'InSight': "It listened for 'marsquakes' to learn what the inside of Mars is like.",
+  'Zhurong': "China's first Mars rover, named after a god of fire.",
+  'Planum Boreum': "Mars's north pole has an ice cap made of water ice, with dry ice (frozen carbon dioxide) in winter.",
+  'Planum Australe': "Mars's south pole has an ice cap with dry ice (frozen carbon dioxide) that lasts all year."
+};
 
 export class ExpeditionMapScene extends Phaser.Scene {
   private mapWidth = 1340;
@@ -646,6 +689,17 @@ export class ExpeditionMapScene extends Phaser.Scene {
   private placedFeatures: PlacedFeature[] = [];
   private hoverRing!: Phaser.GameObjects.Arc;
 
+  // --- kid-friendly extras
+  private factText!: Phaser.GameObjects.Text;
+  private factCounter!: Phaser.GameObjects.Text;
+  private discovered = new Set<string>();
+  private discoverGfx!: Phaser.GameObjects.Graphics;
+  private roverFace!: Phaser.GameObjects.Text;
+  private roverSay!: Phaser.GameObjects.Text;
+  private sayTimer?: Phaser.Time.TimerEvent;
+  private starsEarned = 0;
+  private starsText!: Phaser.GameObjects.Text;
+
   constructor() {
     super({ key: 'ExpeditionMapScene' });
   }
@@ -665,6 +719,7 @@ export class ExpeditionMapScene extends Phaser.Scene {
 
     // Deep-space backdrop
     this.add.rectangle(960, 540, 1920, 1080, 0x02050d).setDepth(-20);
+    this.createTwinklingStars();
 
     // Generate Procedural fallback map canvas (kept for any other consumer of this texture key)
     ProceduralGraphics.generateMarsGlobalMap(this, 'mars_global_mola', this.mapWidth, this.mapHeight);
@@ -684,6 +739,7 @@ export class ExpeditionMapScene extends Phaser.Scene {
     this.createTerrainIndicator();
     this.createLayerPanel();
     this.createMapDecorations();
+    this.createFunFactCard();
   }
 
   /* ------------------------------------------------------------------ */
@@ -794,8 +850,8 @@ export class ExpeditionMapScene extends Phaser.Scene {
     this.mapSurface = this.add.rectangle(cx, cy, this.mapWidth, this.mapHeight, 0x000000, 0)
       .setInteractive().setDepth(1);
     this.crosshair = this.add.graphics().setDepth(20);
-    this.hoverRing = this.add.circle(0, 0, 11, 0x000000, 0)
-      .setStrokeStyle(1.5, 0xffffff, 0.95).setDepth(22).setVisible(false);
+    this.hoverRing = this.add.circle(0, 0, 17, 0x000000, 0)
+      .setStrokeStyle(2.5, 0xffffff, 1).setDepth(22).setVisible(false);
 
     const scanline = this.add.rectangle(cx, this.mapOriginY, this.mapWidth - 4, 3, 0x67e8f9, 0.3).setDepth(19);
     this.tweens.add({
@@ -837,13 +893,163 @@ export class ExpeditionMapScene extends Phaser.Scene {
         this.hoverRing.setVisible(false);
       }
       this.coordinateText.setText(line);
+      this.showFact(hit);
     });
     this.mapSurface.on('pointerout', () => {
       this.hoverRing.setVisible(false);
+      this.showFact(undefined);
     });
-    this.mapSurface.on('pointerdown', () => {
+    this.mapSurface.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       if (this.selectedTerrain) this.updateTerrainIndicator(this.selectedTerrain);
+      const hit = this.findFeatureNear(pointer.x - this.mapOriginX, pointer.y - this.mapOriginY);
+      if (hit) this.collectFeature(hit);
     });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Kid-friendly extras: stars, fun facts, rover buddy, confetti       */
+  /* ------------------------------------------------------------------ */
+
+  private createTwinklingStars() {
+    const colors = [0xfef3c7, 0xfde68a, 0xffffff, 0x7dd3fc];
+    for (let i = 0; i < 110; i++) {
+      const star = this.add.circle(
+        Phaser.Math.Between(0, 1920),
+        Phaser.Math.Between(0, 1080),
+        Phaser.Math.FloatBetween(0.8, 2.2),
+        Phaser.Utils.Array.GetRandom(colors),
+        1
+      ).setDepth(-19);
+      this.tweens.add({
+        targets: star,
+        alpha: { from: 0.15, to: 1 },
+        duration: Phaser.Math.Between(700, 2200),
+        yoyo: true,
+        repeat: -1,
+        delay: Phaser.Math.Between(0, 2000)
+      });
+    }
+  }
+
+  private createFunFactCard() {
+    const cx = 1240;
+    const cy = 130;
+    this.add.rectangle(cx, cy, 720, 50, 0xfef3c7, 0.97).setStrokeStyle(3, 0xf59e0b, 1).setDepth(30);
+    this.factText = this.add.text(cx - 345, cy, '', {
+      fontFamily: 'Rajdhani, sans-serif',
+      fontSize: '15px',
+      fontStyle: 'bold',
+      color: '#451a03',
+      wordWrap: { width: 570 },
+      lineSpacing: 1
+    }).setOrigin(0, 0.5).setDepth(31);
+    this.factCounter = this.add.text(cx + 350, cy, '', {
+      fontFamily: 'Orbitron, sans-serif',
+      fontSize: '12px',
+      fontStyle: 'bold',
+      color: '#b45309'
+    }).setOrigin(1, 0.5).setDepth(31);
+    this.discoverGfx = this.add.graphics().setDepth(6);
+    this.showFact(undefined);
+  }
+
+  private factFor(f: MarsFeature): string {
+    const direct = FEATURE_FACTS[f.name];
+    if (direct) return direct;
+    const n = f.name.toLowerCase();
+    if (n.includes('gale')) return 'The Curiosity rover has explored here since 2012. This crater has a mountain about 5 km tall in the middle!';
+    if (n.includes('jezero')) return 'The Perseverance rover landed here in 2021. Scientists think it was once a lake with a river delta!';
+    if (n.includes('arcadia')) return 'A smooth northern plain. Scientists think water ice is buried just under the ground in places like this.';
+    return f.info;
+  }
+
+  private showFact(hit?: PlacedFeature) {
+    const total = this.placedFeatures.length;
+    this.factCounter?.setText(`★ ${this.discovered.size}/${total}`);
+    if (!this.factText) return;
+    if (hit) {
+      this.factText.setText(`💡 ${hit.feature.name}: ${this.factFor(hit.feature)}`);
+      return;
+    }
+    this.factText.setText(
+      total > 0 && this.discovered.size >= total
+        ? '🏆 You found every landmark. You are a real Mars explorer!'
+        : '💡 Hover over a landmark to learn a fun fact. Click it to collect a ⭐!'
+    );
+  }
+
+  private drawStar(g: Phaser.GameObjects.Graphics, x: number, y: number, r: number) {
+    g.fillStyle(0xfde047, 1).lineStyle(1.5, 0x451a03, 1);
+    g.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const rad = i % 2 === 0 ? r : r * 0.45;
+      const a = -Math.PI / 2 + (i * Math.PI) / 5;
+      const px = x + Math.cos(a) * rad;
+      const py = y + Math.sin(a) * rad;
+      if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
+    }
+    g.closePath();
+    g.fillPath();
+    g.strokePath();
+  }
+
+  private popText(glyph: string, x: number, y: number) {
+    const t = this.add.text(x, y, glyph, { fontSize: '26px' }).setOrigin(0.5).setDepth(40);
+    this.tweens.add({
+      targets: t,
+      y: y - 44,
+      scale: 1.6,
+      alpha: 0,
+      duration: 900,
+      ease: 'Cubic.Out',
+      onComplete: () => t.destroy()
+    });
+  }
+
+  private collectFeature(hit: PlacedFeature) {
+    if (!this.discovered.has(hit.feature.name)) {
+      this.discovered.add(hit.feature.name);
+      audioManager.playSfx(this, 'sfx_ui_confirm', { volume: 0.6 });
+      const x = this.mapOriginX + hit.x;
+      const y = this.mapOriginY + hit.y;
+      this.drawStar(this.discoverGfx, x + 13, y - 13, 7);
+      this.popText('⭐', x, y - 10);
+    }
+    this.showFact(hit);
+  }
+
+  private say(text: string, ms = 1600) {
+    if (!this.roverSay) return;
+    this.roverSay.setText(text).setPosition(this.roverSprite.x, this.roverSprite.y - 22).setVisible(true);
+    this.sayTimer?.remove(false);
+    this.sayTimer = this.time.delayedCall(ms, () => this.roverSay.setVisible(false));
+  }
+
+  private earnStar() {
+    this.starsEarned++;
+    const n = this.starsEarned;
+    this.starsText.setText(`MISSION STARS: ${'★'.repeat(n)}${'☆'.repeat(3 - n)}`).setColor('#fde047');
+    this.popText('⭐', this.roverSprite.x, this.roverSprite.y - 24);
+    audioManager.playSfx(this, 'sfx_ui_confirm', { volume: 0.5 });
+    this.say(['Wheee!', 'Halfway there!', 'Almost there!'][n - 1]);
+  }
+
+  private confetti(x: number, y: number) {
+    const colors = [0xf59e0b, 0xfde047, 0xdc2626, 0x38bdf8, 0xffffff, 0x10b981];
+    for (let i = 0; i < 40; i++) {
+      const piece = this.add.rectangle(x, y, Phaser.Math.Between(4, 8), Phaser.Math.Between(6, 12), Phaser.Utils.Array.GetRandom(colors))
+        .setDepth(40);
+      this.tweens.add({
+        targets: piece,
+        x: x + Phaser.Math.Between(-180, 180),
+        y: y + Phaser.Math.Between(-150, 70),
+        angle: Phaser.Math.Between(-360, 360),
+        alpha: 0,
+        duration: Phaser.Math.Between(1000, 1700),
+        ease: 'Cubic.Out',
+        onComplete: () => piece.destroy()
+      });
+    }
   }
 
   private findFeatureNear(localX: number, localY: number): PlacedFeature | undefined {
@@ -889,34 +1095,48 @@ export class ExpeditionMapScene extends Phaser.Scene {
   /* ------------------------------------------------------------------ */
 
   private drawFeatureIcon(g: Phaser.GameObjects.Graphics, kind: FeatureKind, x: number, y: number) {
+    const DARK = 0x02050d;
     switch (kind) {
-      case 'volcano':
-        g.fillStyle(0xfbbf24, 1).lineStyle(1, 0x1f1300, 1);
-        g.beginPath(); g.moveTo(x, y - 6); g.lineTo(x - 6, y + 5); g.lineTo(x + 6, y + 5); g.closePath();
-        g.fillPath(); g.strokePath();
+      case 'volcano': {
+        const tri = (r: number) => {
+          g.beginPath(); g.moveTo(x, y - r); g.lineTo(x - r * 1.05, y + r * 0.8); g.lineTo(x + r * 1.05, y + r * 0.8); g.closePath();
+        };
+        g.fillStyle(DARK, 1); tri(11); g.fillPath();
+        g.fillStyle(0xdc2626, 1); tri(8.5); g.fillPath();
+        g.lineStyle(1.5, 0xffffff, 1); tri(8.5); g.strokePath();
+        g.fillStyle(0xffffff, 1).fillCircle(x, y - 3, 1.6); // summit caldera
         break;
+      }
       case 'crater':
-        g.lineStyle(1.5, 0xe2e8f0, 0.95).strokeCircle(x, y, 5);
-        g.fillStyle(0xe2e8f0, 0.9).fillCircle(x, y, 1.2);
+        g.lineStyle(5.5, DARK, 0.95).strokeCircle(x, y, 7);
+        g.lineStyle(2.5, 0xffffff, 1).strokeCircle(x, y, 7);
+        g.fillStyle(DARK, 1).fillCircle(x, y, 2.6);
+        g.fillStyle(0xffffff, 1).fillCircle(x, y, 1.4);
         break;
       case 'basin':
-        g.lineStyle(1.5, 0x7dd3fc, 0.95).strokeCircle(x, y, 8);
-        g.lineStyle(1, 0x7dd3fc, 0.5).strokeCircle(x, y, 4);
+        g.lineStyle(6, DARK, 0.95).strokeCircle(x, y, 11);
+        g.lineStyle(3, 0x7dd3fc, 1).strokeCircle(x, y, 11);
+        g.lineStyle(1.5, 0xffffff, 0.9).strokeCircle(x, y, 5.5);
         break;
       case 'canyon':
-        g.lineStyle(3, 0xfb923c, 0.95).lineBetween(x - 9, y + 1, x + 9, y - 1);
+        g.lineStyle(8, DARK, 0.95).lineBetween(x - 12, y + 2, x + 12, y - 2);
+        g.lineStyle(4, 0xffffff, 1).lineBetween(x - 12, y + 2, x + 12, y - 2);
         break;
       case 'lander': {
-        g.fillStyle(0xfde047, 1).lineStyle(1, 0x1f1300, 1);
-        g.beginPath();
-        for (let i = 0; i < 10; i++) {
-          const r = i % 2 === 0 ? 6.5 : 2.8;
-          const a = -Math.PI / 2 + (i * Math.PI) / 5;
-          const px = x + Math.cos(a) * r;
-          const py = y + Math.sin(a) * r;
-          if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
-        }
-        g.closePath(); g.fillPath(); g.strokePath();
+        const star = (ro: number, ri: number) => {
+          g.beginPath();
+          for (let i = 0; i < 10; i++) {
+            const r = i % 2 === 0 ? ro : ri;
+            const ang = -Math.PI / 2 + (i * Math.PI) / 5;
+            const px = x + Math.cos(ang) * r;
+            const py = y + Math.sin(ang) * r;
+            if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
+          }
+          g.closePath();
+        };
+        g.fillStyle(DARK, 1); star(11.5, 5); g.fillPath();
+        g.fillStyle(0xfde047, 1); star(8.5, 3.6); g.fillPath();
+        g.lineStyle(1.5, DARK, 1); star(8.5, 3.6); g.strokePath();
         break;
       }
       default:
@@ -943,7 +1163,7 @@ export class ExpeditionMapScene extends Phaser.Scene {
       occupied.push({ x: p.x, y: p.y, name: d.name.toLowerCase() });
     });
 
-    MARS_FEATURES.forEach(f => {
+    [...MARS_FEATURES].sort((a, b) => Number(!!a.major) - Number(!!b.major)).forEach(f => {
       const p = projectMarsToCanvas(f.lat, eastLonToProjection(f.lonE, this.mapWidth, this.mapHeight), this.mapWidth, this.mapHeight);
       if (p.x < 0 || p.x > this.mapWidth || p.y < 0 || p.y > this.mapHeight) return;
       if (occupied.some(o => Math.hypot(o.x - p.x, o.y - p.y) < 10 || o.name.includes(f.name.toLowerCase()))) return;
@@ -955,19 +1175,20 @@ export class ExpeditionMapScene extends Phaser.Scene {
       this.drawFeatureIcon(isLander ? iconsLander : iconsMain, f.kind, x, y);
 
       const noIcon = f.kind === 'region' || f.kind === 'cap';
+      const iconGap = f.kind === 'basin' ? 15 : f.kind === 'volcano' || f.kind === 'lander' ? 13 : 11;
       const label = this.add.text(
         x,
-        noIcon ? y : y + (f.kind === 'basin' ? 11 : 8),
-        noIcon ? f.name.toUpperCase().split('').join(' ') : f.name.toUpperCase(),
+        noIcon ? y : y + iconGap,
+        f.name.toUpperCase(),
         {
           fontFamily: 'Share Tech Mono, monospace',
-          fontSize: f.major ? '11px' : noIcon ? '9px' : '9px',
+          fontSize: f.major ? '13px' : noIcon ? '11px' : '12px',
+          fontStyle: 'bold',
           color: KIND_COLOR[f.kind],
-          stroke: '#02050d',
-          strokeThickness: 3
+          backgroundColor: noIcon ? '#02050db3' : '#02050ddd',
+          padding: { x: 4, y: 2 }
         }
       ).setOrigin(0.5, noIcon ? 0.5 : 0);
-      if (noIcon) label.setAlpha(0.8);
       layer.add(label);
 
       this.placedFeatures.push({ feature: f, x: p.x, y: p.y });
@@ -1052,6 +1273,11 @@ export class ExpeditionMapScene extends Phaser.Scene {
       const isTarget = site.name === this.currentTargetSite.name;
       const isOrigin = site.name === this.currentOriginSite.name;
       const color = isTarget ? 0xef4444 : (isOrigin ? 0x10b981 : 0xf59e0b);
+      this.placedFeatures.push({
+        feature: { name: site.name, lat: site.lat, lonE: site.lon, kind: 'crater', info: 'MISSION SITE' },
+        x: pos.x,
+        y: pos.y
+      });
 
       if (isTarget || isOrigin) {
         const halo = this.add.circle(canvasX, canvasY, 16, color, 0.18).setDepth(9);
@@ -1061,12 +1287,13 @@ export class ExpeditionMapScene extends Phaser.Scene {
       const pin = this.add.circle(canvasX, canvasY, isTarget || isOrigin ? 8 : 5, color, 0.95)
         .setStrokeStyle(2, 0xffffff).setDepth(10);
 
-      this.add.text(canvasX, canvasY - 16, site.name.toUpperCase(), {
+      this.add.text(canvasX, canvasY - 20, (isTarget ? 'GOAL ▸ ' : isOrigin ? 'START ▸ ' : '') + site.name.toUpperCase(), {
         fontFamily: 'Share Tech Mono, monospace',
-        fontSize: '10px',
-        color: isTarget ? '#ef4444' : (isOrigin ? '#10b981' : '#f59e0b'),
-        backgroundColor: '#050a14d9',
-        padding: { x: 3, y: 1 }
+        fontSize: isTarget || isOrigin ? '14px' : '12px',
+        fontStyle: 'bold',
+        color: isTarget ? '#fca5a5' : (isOrigin ? '#6ee7b7' : '#fcd34d'),
+        backgroundColor: '#02050df2',
+        padding: { x: 5, y: 2 }
       }).setOrigin(0.5).setDepth(11);
 
       if (isTarget) {
@@ -1090,12 +1317,13 @@ export class ExpeditionMapScene extends Phaser.Scene {
       this.add.rectangle(canvasX, canvasY, 8, 8, 0x38bdf8)
         .setStrokeStyle(1, 0xffffff).setAngle(45).setDepth(10);
 
-      this.add.text(canvasX, canvasY + 11, depot.name, {
+      this.add.text(canvasX, canvasY + 12, depot.name, {
         fontFamily: 'Share Tech Mono, monospace',
-        fontSize: '9px',
+        fontSize: '11px',
+        fontStyle: 'bold',
         color: '#bae6fd',
-        stroke: '#02050d',
-        strokeThickness: 3
+        backgroundColor: '#02050dd9',
+        padding: { x: 4, y: 2 }
       }).setOrigin(0.5, 0).setDepth(11);
     });
   }
@@ -1141,6 +1369,17 @@ export class ExpeditionMapScene extends Phaser.Scene {
     this.tweens.add({ targets: this.roverRing, scale: { from: 1, to: 2.6 }, alpha: { from: 0.9, to: 0 }, duration: 1400, repeat: -1 });
     this.roverSprite = this.add.circle(this.mapOriginX + startPos.x, this.mapOriginY + startPos.y, 9, 0xffffff, 1)
       .setStrokeStyle(2, 0x0284c7).setDepth(12);
+    this.roverFace = this.add.text(this.roverSprite.x, this.roverSprite.y, '🤖', { fontSize: '22px' })
+      .setOrigin(0.5).setDepth(13);
+    this.tweens.add({ targets: this.roverFace, angle: { from: -10, to: 10 }, duration: 450, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+    this.roverSay = this.add.text(this.roverSprite.x, this.roverSprite.y - 22, '', {
+      fontFamily: 'Rajdhani, sans-serif',
+      fontSize: '14px',
+      fontStyle: 'bold',
+      color: '#451a03',
+      backgroundColor: '#fef3c7',
+      padding: { x: 8, y: 4 }
+    }).setOrigin(0.5, 1).setDepth(40).setVisible(false);
   }
 
   /* ------------------------------------------------------------------ */
@@ -1196,6 +1435,11 @@ export class ExpeditionMapScene extends Phaser.Scene {
     }).setDepth(31);
     this.progressBar = this.add.graphics().setDepth(31);
     this.drawProgress(0);
+    this.starsText = this.add.text(panelX - 120, 530, 'MISSION STARS: ☆☆☆', {
+      fontFamily: 'Share Tech Mono, monospace',
+      fontSize: '12px',
+      color: '#94a3b8'
+    }).setDepth(31);
 
     // Traverse Action Button
     this.actionButtonContainer = this.add.container(panelX, 580).setDepth(32);
@@ -1203,7 +1447,7 @@ export class ExpeditionMapScene extends Phaser.Scene {
       .setStrokeStyle(1, 0x38bdf8)
       .setInteractive({ useHandCursor: true });
 
-    const btnTxt = this.add.text(0, 0, 'COMMENCE TRAVERSE', {
+    const btnTxt = this.add.text(0, 0, 'START THE ADVENTURE!', {
       fontFamily: 'Orbitron, sans-serif',
       fontSize: '12px',
       color: '#ffffff'
@@ -1460,9 +1704,10 @@ export class ExpeditionMapScene extends Phaser.Scene {
     if (this.isTraversing) return;
     this.isTraversing = true;
     soundFx.playTelemetryChirp();
+    this.say('Zoom zoom!');
 
     btnBg.setFillStyle(0x1e293b);
-    btnTxt.setText('TRAVERSING MARS...');
+    btnTxt.setText('ROVER ON THE MOVE...');
 
     const waypoints = getTraverseWaypoints(this.currentOriginSite, this.currentTargetSite, 24);
 
@@ -1478,6 +1723,8 @@ export class ExpeditionMapScene extends Phaser.Scene {
         this.roverSprite.x = this.mapOriginX + canvasCoords.x;
         this.roverSprite.y = this.mapOriginY + canvasCoords.y;
         this.roverRing.setPosition(this.roverSprite.x, this.roverSprite.y);
+        this.roverFace.setPosition(this.roverSprite.x, this.roverSprite.y);
+        this.roverSay.setPosition(this.roverSprite.x, this.roverSprite.y - 22);
 
         // Visual trail + progress
         if (idx > 0 && Math.abs(this.roverSprite.x - prevX) < this.mapWidth / 2) {
@@ -1485,6 +1732,8 @@ export class ExpeditionMapScene extends Phaser.Scene {
           this.trail.lineBetween(prevX, prevY, this.roverSprite.x, this.roverSprite.y);
         }
         this.drawProgress(wp.fraction);
+        const thresholds = [0.25, 0.5, 0.75];
+        if (this.starsEarned < 3 && wp.fraction >= thresholds[this.starsEarned]) this.earnStar();
 
         const remDistance = Math.round(this.totalDistanceKm * (1 - wp.fraction));
         this.distanceText.setText(`SPHERICAL DISTANCE:\n${remDistance} km remaining`);
@@ -1503,8 +1752,10 @@ export class ExpeditionMapScene extends Phaser.Scene {
   private onTraverseComplete(btnBg: Phaser.GameObjects.Rectangle, btnTxt: Phaser.GameObjects.Text) {
     audioManager.playSfx(this, 'sfx_ui_confirm', { volume: 0.85 });
     btnBg.setFillStyle(0x10b981);
-    btnTxt.setText('ARRIVED: ENTER FIELD');
+    btnTxt.setText('WE MADE IT! EXPLORE');
     this.drawProgress(1);
+    this.say('We made it!', 4000);
+    this.confetti(this.roverSprite.x, this.roverSprite.y);
 
     btnBg.off('pointerdown');
     btnBg.on('pointerdown', () => {
