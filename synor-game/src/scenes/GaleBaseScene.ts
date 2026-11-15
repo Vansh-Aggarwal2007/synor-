@@ -645,9 +645,12 @@ export class GaleBaseScene extends Phaser.Scene {
     this.cameras.main.setScroll(0, 0);
     this.cameras.main.fadeIn(400, 5, 10, 20);
 
-    // Prevent 0% power soft-lock on Act I boot
-    if (gameState.resources.power <= 0) {
-      gameState.resources.power = 65;
+    // Ensure healthy power on Gale Base arrival / docking
+    if (gameState.currentChapter === 'act_3_gale_return') {
+      gameState.resources.power = Math.max(85, gameState.resources.power);
+      gameState.addLog('DOCKING COMPLETE: LREV umbilical coupled to Gale Kilopower fission bus. Power reserves replenished.', 'system');
+    } else if (gameState.resources.power < 60) {
+      gameState.resources.power = 85;
     }
 
     this.dust = getDustModel();

@@ -1837,9 +1837,9 @@ export class ArcadiaFieldScene extends Phaser.Scene {
     const panel = this.openPanel(780, 'PRCD ROTARY CRYO-DRILL // EXTRACTION DEPTH SELECTION');
 
     const drillOptions = [
-      { depth: 'SHALLOW (0.5m)', pwr: '15% Power', yield: '35% Ice Yield', dust: '42% Basalt Dust', deep: false },
-      { depth: 'MID-DEPTH (1.5m)', pwr: '28% Power', yield: '68% Ice Yield', dust: '22% Basalt Dust', deep: false },
-      { depth: 'DEEP CORE (3.2m)', pwr: '45% Power', yield: '96% Ice Yield', dust: '6% Basalt Dust', deep: true }
+      { depth: 'SHALLOW (0.5m)', pwr: '8% Power', yield: '35% Ice Yield', dust: '42% Basalt Dust', deep: false },
+      { depth: 'MID-DEPTH (1.5m)', pwr: '12% Power', yield: '68% Ice Yield', dust: '22% Basalt Dust', deep: false },
+      { depth: 'DEEP CORE (3.2m)', pwr: '18% Power', yield: '96% Ice Yield', dust: '6% Basalt Dust', deep: true }
     ];
     const num = (s: string) => parseInt(s, 10);
 
@@ -1890,7 +1890,7 @@ export class ArcadiaFieldScene extends Phaser.Scene {
       optBg.on('pointerdown', () => {
         soundFx.playTelemetryChirp();
         this.cameras.main.shake(160, 0.0018);
-        gameState.resources.power = Math.max(10, gameState.resources.power - (opt.deep ? 35 : 18));
+        gameState.resources.power = Math.max(30, gameState.resources.power - (opt.deep ? 18 : 10));
         gameState.waterIceReserve = Math.min(100, gameState.waterIceReserve + (opt.deep ? 28 : 12));
         if (!gameState.arcadiaCompletedExperiments.includes('exp_arcadia_core')) {
           gameState.arcadiaCompletedExperiments.push('exp_arcadia_core');
