@@ -39,6 +39,12 @@ export class PreloadScene extends Phaser.Scene {
       frameHeight: 96
     });
 
+    // Load Blender 3D Intro Cutscene Frames (73 cinematic frames rendered from scene_01_realistic_intro.blend)
+    for (let i = 1; i <= 73; i++) {
+      const pad = String(i).padStart(3, '0');
+      this.load.image(`intro_frame_${pad}`, `/assets/renders/intro/frame_${pad}.webp`);
+    }
+
     // Load High-Res Transparent Modular Outpost Structures & Equipment
     this.load.image('outpost_dome', '/assets/outpost/dome_greenhouse.png');
     this.load.image('outpost_hab', '/assets/outpost/hab_central.png');

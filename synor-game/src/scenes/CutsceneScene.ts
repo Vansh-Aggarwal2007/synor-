@@ -1,9 +1,9 @@
 /**
  * Cutscene Scene
- * Plays the pre-rendered 3D cinematic video exported from Blender (intro_cutscene.mp4)
- * with zero-latency video streaming, audio, and skip controls.
- * If video is not yet rendered, displays a cinematic narrative prelude with
- * hard-science telemetry logs and instant skip to GaleBaseScene.
+ * Plays the 3D realistic cinematic intro rendered from Blender (scene_01_realistic_intro.blend)
+ * with cinematic 2.39:1 widescreen letterboxing, telemetry HUD readouts, synchronized
+ * space audio, and instant skip controls.
+ * Also supports streaming intro_cutscene.mp4 if present.
  */
 
 import Phaser from 'phaser';
@@ -14,15 +14,14 @@ import { attachUIInteraction } from '../utils/UIInteraction';
 export class CutsceneScene extends Phaser.Scene {
   private videoElement: HTMLVideoElement | null = null;
   private isSkipping = false;
-  private logIndex = 0;
-  private logLines: string[] = [
-    'ARES MISSION SYNOR // FLIGHT TELEMETRY LOG 001',
-    'TRANSIT DURATION: 214 DAYS THROUGH DEEP INTERPLANETARY VOID.',
-    'APPROACHING RED PLANET TERMINATOR. ORBITAL INSERTION CONFIRMED.',
-    'AEROCAPTURE PROFILE NOMINAL. HEATSHIELD JETTISONED.',
-    'LOCKED ONTO GALE CRATER OUTPOST BEACON: LAT -5.4° LON 137.8°.',
-    'ATMOSPHERIC RE-ENTRY SEQUENCE INITIATED... WELCOME TO MARS.'
-  ];
+
+  // 3D Blender Frame Sequence State
+  private currentFrameIndex = 1;
+  private readonly totalIntroFrames = 73;
+  private frameImage: Phaser.GameObjects.Image | null = null;
+  private stageTitleText: Phaser.GameObjects.Text | null = null;
+  private stageSubText: Phaser.GameObjects.Text | null = null;
+  private frameTimerEvent: Phaser.Time.TimerEvent | null = null;
 
   constructor() {
     super({ key: 'CutsceneScene' });
@@ -30,16 +29,17 @@ export class CutsceneScene extends Phaser.Scene {
 
   create() {
     this.isSkipping = false;
+    this.currentFrameIndex = 1;
+
     audioManager.stopMusic(500);
-    soundFx.startSpaceAtmosphereDrone();
 
-    // Check if an MP4 or WebM video file exists
-    this.attemptPlayVideoCutscene();
-
-    // Setup Skip key
+    // Setup Skip key handlers
     this.input.keyboard?.addKey('SPACE').on('down', () => this.finishCutscene());
     this.input.keyboard?.addKey('ENTER').on('down', () => this.finishCutscene());
     this.input.keyboard?.addKey('ESC').on('down', () => this.finishCutscene());
+
+    // Check if an MP4 video file exists; if not, immediately play 3D Blender frame sequence
+    this.attemptPlayVideoCutscene();
   }
 
   private attemptPlayVideoCutscene() {
@@ -58,7 +58,7 @@ export class CutsceneScene extends Phaser.Scene {
     video.style.backgroundColor = '#000000';
 
     video.onloadeddata = () => {
-      // Video genuinely exists and is ready to stream!
+      // External MP4 video exists!
       this.videoElement = video;
       document.body.appendChild(video);
       video.play().catch(() => {});
@@ -67,15 +67,169 @@ export class CutsceneScene extends Phaser.Scene {
         this.finishCutscene();
       };
 
-      // Add HTML skip button over video
       this.createSkipOverlay();
     };
 
     video.onerror = () => {
-      // Video not yet exported from Blender - show atmospheric procedural cutscene!
+      // Stream the 73 high-resolution 3D Blender rendered frames
       video.remove();
-      this.createProceduralCinematicCutscene();
+      this.createBlender3DCinematic();
     };
+  }
+
+  private createBlender3DCinematic() {
+    const width = 1920;
+    const height = 1080;
+
+    // Pitch-black space background
+    this.add.rectangle(width / 2, height / 2, width, height, 0x010204).setDepth(0);
+
+    // Subtle background space stars
+    for (let i = 0; i < 60; i++) {
+      const sx = Phaser.Math.Between(0, width);
+      const sy = Phaser.Math.Between(0, height);
+      this.add.circle(sx, sy, Math.random() * 1.5 + 0.5, 0xffffff, Math.random() * 0.7 + 0.3).setDepth(1);
+    }
+
+    // Central 3D Render Display
+    const firstFrameKey = 'intro_frame_001';
+    if (this.textures.exists(firstFrameKey)) {
+      this.frameImage = this.add.image(width / 2, height / 2, firstFrameKey);
+      this.frameImage.setDisplaySize(width, height);
+      this.frameImage.setDepth(10);
+    }
+
+    // Cinematic Widescreen Letterboxing (Anamorphic Cinema Bars)
+    const barHeight = 110;
+    this.add.rectangle(width / 2, barHeight / 2, width, barHeight, 0x000000).setDepth(100);
+    this.add.rectangle(width / 2, height - barHeight / 2, width, barHeight, 0x000000).setDepth(100);
+
+    // Top Cinematic HUD Header
+    this.add.text(50, 42, 'NASA ARES INTERPLANETARY EXPEDITION // SYNOR', {
+      fontFamily: 'Orbitron, sans-serif',
+      fontSize: '15px',
+      color: '#38bdf8',
+      letterSpacing: 4
+    }).setDepth(110);
+
+    this.add.text(width - 50, 42, 'DSN 34M CARRIER: LOCKED [NOMINAL]', {
+      fontFamily: 'Share Tech Mono, monospace',
+      fontSize: '14px',
+      color: '#34d399',
+      letterSpacing: 2
+    }).setOrigin(1, 0).setDepth(110);
+
+    // Stage Status Telemetry Banner (Bottom Left / Center)
+    this.stageTitleText = this.add.text(width / 2, height - 76, 'STAGE 01: DEEP SPACE FLYBY // VELOCITY: 28,400 KM/H', {
+      fontFamily: 'Orbitron, sans-serif',
+      fontSize: '14px',
+      color: '#38bdf8',
+      letterSpacing: 3
+    }).setOrigin(0.5, 0).setDepth(110);
+
+    this.stageSubText = this.add.text(width / 2, height - 48, 'APPROACHING RED PLANET TERMINATOR // TRAJECTORY NOMINAL', {
+      fontFamily: 'Share Tech Mono, monospace',
+      fontSize: '13px',
+      color: '#94a3b8',
+      letterSpacing: 2
+    }).setOrigin(0.5, 0).setDepth(110);
+
+    // Interactive On-Screen Skip Button (Bottom Right)
+    const skipBtnBg = this.add.rectangle(width - 180, height - 55, 260, 40, 0x0a1424, 0.85)
+      .setStrokeStyle(1, 0x38bdf8, 0.8)
+      .setDepth(120)
+      .setInteractive({ useHandCursor: true });
+
+    const skipBtnText = this.add.text(width - 180, height - 55, 'SKIP INTRO [SPACE]', {
+      fontFamily: 'Orbitron, sans-serif',
+      fontSize: '12px',
+      color: '#38bdf8',
+      letterSpacing: 2
+    }).setOrigin(0.5).setDepth(121);
+
+    skipBtnBg.on('pointerover', () => {
+      skipBtnBg.setFillStyle(0x38bdf8, 0.35);
+      skipBtnText.setColor('#ffffff');
+      soundFx.playClick(1000);
+    });
+
+    skipBtnBg.on('pointerout', () => {
+      skipBtnBg.setFillStyle(0x0a1424, 0.85);
+      skipBtnText.setColor('#38bdf8');
+    });
+
+    skipBtnBg.on('pointerdown', () => this.finishCutscene());
+
+    // Also allow clicking anywhere on background to skip
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      // Don't duplicate if clicking the skip button directly
+      if (pointer.y > height - 110 && pointer.x > width - 350) return;
+      this.finishCutscene();
+    });
+
+    // Start Audio
+    soundFx.startSpaceAtmosphereDrone();
+    soundFx.playRocketRoar(3.0);
+
+    // Start 3D Frame Progression (~14 FPS = 72ms per frame)
+    this.frameTimerEvent = this.time.addEvent({
+      delay: 72,
+      repeat: this.totalIntroFrames - 1,
+      callback: () => this.advanceBlenderFrame()
+    });
+  }
+
+  private advanceBlenderFrame() {
+    if (this.isSkipping) return;
+
+    this.currentFrameIndex++;
+    const pad = String(this.currentFrameIndex).padStart(3, '0');
+    const textureKey = `intro_frame_${pad}`;
+
+    if (this.frameImage && this.textures.exists(textureKey)) {
+      this.frameImage.setTexture(textureKey);
+    }
+
+    // Audio & Telemetry Cues for the 3 Stages
+    if (this.currentFrameIndex === 22) {
+      // Stage 2: Transit towards Mars
+      soundFx.playTelemetryChirp();
+      if (this.stageTitleText) {
+        this.stageTitleText.setText('STAGE 02: ORBITAL AEROCAPTURE // MARS ATMOSPHERE INTERFACE');
+        this.stageTitleText.setColor('#f59e0b');
+      }
+      if (this.stageSubText) {
+        this.stageSubText.setText('TARGETING GALE CRATER OUTPOST // LAT -5.4° LON 137.8° // HEATSHIELD ARMED');
+      }
+    } else if (this.currentFrameIndex === 43) {
+      // Stage 3: Retro-burn descent
+      soundFx.playRocketRoar(3.2);
+      if (this.stageTitleText) {
+        this.stageTitleText.setText('STAGE 03: GALE CRATER PAD 01 // RETRO-THRUSTERS ENGAGED');
+        this.stageTitleText.setColor('#38bdf8');
+      }
+      if (this.stageSubText) {
+        this.stageSubText.setText('DESCENT VELOCITY: 8.2 M/S // QUAD LANDING LEGS DEPLOYED');
+      }
+    } else if (this.currentFrameIndex === 60) {
+      // Touchdown moment!
+      soundFx.playTouchdownThud();
+      soundFx.playAirlockHiss();
+      if (this.stageTitleText) {
+        this.stageTitleText.setText('TOUCHDOWN CONFIRMED // GALE CRATER LANDING PAD 01');
+        this.stageTitleText.setColor('#34d399');
+      }
+      if (this.stageSubText) {
+        this.stageSubText.setText('ALL PRIMARY SYSTEMS NOMINAL // WELCOME TO MARS, COMMANDER.');
+      }
+    }
+
+    // When all 73 frames finish, hold hero frame for 1.6s then transition
+    if (this.currentFrameIndex >= this.totalIntroFrames) {
+      this.time.delayedCall(1600, () => {
+        if (!this.isSkipping) this.finishCutscene();
+      });
+    }
   }
 
   private createSkipOverlay() {
@@ -246,9 +400,15 @@ export class CutsceneScene extends Phaser.Scene {
     });
   }
 
+
   private finishCutscene() {
     if (this.isSkipping) return;
     this.isSkipping = true;
+
+    if (this.frameTimerEvent) {
+      this.frameTimerEvent.destroy();
+      this.frameTimerEvent = null;
+    }
 
     audioManager.playSfx(this, 'sfx_ui_confirm', { volume: 0.8 });
     this.removeSkipOverlay();

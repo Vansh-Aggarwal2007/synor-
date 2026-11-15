@@ -246,6 +246,79 @@ export class ProceduralAudio {
     this.windNode = windSource;
   }
 
+  public playRocketRoar(duration = 2.5) {
+    this.init();
+    if (!this.ctx || !this.sfxGain) return;
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+
+    const now = this.ctx.currentTime;
+    const bufferSize = Math.floor(this.ctx.sampleRate * duration);
+    const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      output[i] = Math.random() * 2 - 1;
+    }
+
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = noiseBuffer;
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(80, now);
+    filter.frequency.exponentialRampToValueAtTime(320, now + duration * 0.4);
+    filter.frequency.exponentialRampToValueAtTime(60, now + duration);
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.01, now);
+    gain.gain.linearRampToValueAtTime(0.45, now + duration * 0.3);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    // Deep sub bass tone for engine rumble
+    const subOsc = this.ctx.createOscillator();
+    subOsc.type = 'sawtooth';
+    subOsc.frequency.setValueAtTime(45, now);
+    subOsc.frequency.exponentialRampToValueAtTime(35, now + duration);
+
+    const subGain = this.ctx.createGain();
+    subGain.gain.setValueAtTime(0.3, now);
+    subGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.sfxGain);
+
+    subOsc.connect(subGain);
+    subGain.connect(this.sfxGain);
+
+    noise.start(now);
+    noise.stop(now + duration);
+    subOsc.start(now);
+    subOsc.stop(now + duration);
+  }
+
+  public playTouchdownThud() {
+    this.init();
+    if (!this.ctx || !this.sfxGain) return;
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(120, now);
+    osc.frequency.exponentialRampToValueAtTime(28, now + 0.35);
+
+    gain.gain.setValueAtTime(0.7, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+
+    osc.start(now);
+    osc.stop(now + 0.45);
+  }
+
   public stopAmbient() {
     try {
       this.droneOsc1?.stop();

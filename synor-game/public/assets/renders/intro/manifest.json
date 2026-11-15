@@ -1,0 +1,522 @@
+{
+  "totalFrames": 73,
+  "fps": 18,
+  "scenes": {
+    "flyby": 21,
+    "transit": 21,
+    "landing": 31
+  },
+  "frames": [
+    {
+      "index": 1,
+      "frame": 50,
+      "filename": "frame_001.webp",
+      "stage": "flyby",
+      "camera": "Cam_Scene1_Flyby"
+    },
+    {
+      "index": 2,
+      "frame": 57,
+      "filename": "frame_002.webp",
+      "stage": "flyby",
+      "camera": "Cam_Scene1_Flyby"
+    },
+    {
+      "index": 3,
+      "frame": 64,
+      "filename": "frame_003.webp",
+      "stage": "flyby",
+      "camera": "Cam_Scene1_Flyby"
+    },
+    {
+      "index": 4,
+      "frame": 71,
+      "filename": "frame_004.webp",
+      "stage": "flyby",
+      "camera": "Cam_Scene1_Flyby"
+    },
+    {
+      "index": 5,
+      "frame": 78,
+      "filename": "frame_005.webp",
+      "stage": "flyby",
+      "camera": "Cam_Scene1_Flyby"
+    },
+    {
+      "index": 6,
+      "frame": 85,
+      "filename": "frame_006.webp",
+      "stage": "flyby",
+      "camera": "Cam_Scene1_Flyby"
+    },
+    {
+      "index": 7,
+      "frame": 92,
+      "filename": "frame_007.webp",
+      "stage": "flyby",
+      "camera": "Cam_Scene1_Flyby"
+    },
+    {
+      "index": 8,
+      "frame": 99,
+      "filename": "frame_008.webp",
+      "stage": "flyby",
+      "camera": "Cam_Scene1_Flyby"
+    },
+    {
+      "index": 9,
+      "frame": 106,
+      "filename": "frame_009.webp",
+      "stage": "flyby",
+      "camera": "Cam_Scene1_Flyby"
+    },
+    {
+      "index": 10,
+      "frame": 113,
+      "filename": "frame_010.webp",
+      "stage": "flyby",
+      "camera": "Cam_Scene1_Flyby"
+    },
+    {
+      "index": 11,
+      "frame": 120,
+      "filename": "frame_011.webp",
+      "stage": "flyby",
+      "camera": "Cam_Scene1_Flyby"
+    },
+    {
+      "index": 12,
+      "frame": 127,
+      "filename": "frame_012.webp",
+      "stage": "flyby",
+      "camera": "Cam_Scene1_Flyby"
+    },
+    {
+      "index": 13,
+      "frame": 134,
+      "filename": "frame_013.webp",
+      "stage": "flyby",
+      "camera": "Cam_Scene1_Flyby"
+    },
+    {
+      "index": 14,
+      "frame": 141,
+      "filename": "frame_014.webp",
+      "stage": "flyby",
+      "camera": "Cam_Scene1_Flyby"
+    },
+    {
+      "index": 15,
+      "frame": 148,
+      "filename": "frame_015.webp",
+      "stage": "flyby",
+      "camera": "Cam_Scene1_Flyby"
+    },
+    {
+      "index": 16,
+      "frame": 155,
+      "filename": "frame_016.webp",
+      "stage": "flyby",
+      "camera": "Cam_Scene1_Flyby"
+    },
+    {
+      "index": 17,
+      "frame": 162,
+      "filename": "frame_017.webp",
+      "stage": "flyby",
+      "camera": "Cam_Scene1_Flyby"
+    },
+    {
+      "index": 18,
+      "frame": 169,
+      "filename": "frame_018.webp",
+      "stage": "flyby",
+      "camera": "Cam_Scene1_Flyby"
+    },
+    {
+      "index": 19,
+      "frame": 176,
+      "filename": "frame_019.webp",
+      "stage": "flyby",
+      "camera": "Cam_Scene1_Flyby"
+    },
+    {
+      "index": 20,
+      "frame": 183,
+      "filename": "frame_020.webp",
+      "stage": "flyby",
+      "camera": "Cam_Scene1_Flyby"
+    },
+    {
+      "index": 21,
+      "frame": 190,
+      "filename": "frame_021.webp",
+      "stage": "flyby",
+      "camera": "Cam_Scene1_Flyby"
+    },
+    {
+      "index": 22,
+      "frame": 310,
+      "filename": "frame_022.webp",
+      "stage": "transit",
+      "camera": "Cam_Scene2_Transit"
+    },
+    {
+      "index": 23,
+      "frame": 321,
+      "filename": "frame_023.webp",
+      "stage": "transit",
+      "camera": "Cam_Scene2_Transit"
+    },
+    {
+      "index": 24,
+      "frame": 332,
+      "filename": "frame_024.webp",
+      "stage": "transit",
+      "camera": "Cam_Scene2_Transit"
+    },
+    {
+      "index": 25,
+      "frame": 343,
+      "filename": "frame_025.webp",
+      "stage": "transit",
+      "camera": "Cam_Scene2_Transit"
+    },
+    {
+      "index": 26,
+      "frame": 354,
+      "filename": "frame_026.webp",
+      "stage": "transit",
+      "camera": "Cam_Scene2_Transit"
+    },
+    {
+      "index": 27,
+      "frame": 365,
+      "filename": "frame_027.webp",
+      "stage": "transit",
+      "camera": "Cam_Scene2_Transit"
+    },
+    {
+      "index": 28,
+      "frame": 376,
+      "filename": "frame_028.webp",
+      "stage": "transit",
+      "camera": "Cam_Scene2_Transit"
+    },
+    {
+      "index": 29,
+      "frame": 387,
+      "filename": "frame_029.webp",
+      "stage": "transit",
+      "camera": "Cam_Scene2_Transit"
+    },
+    {
+      "index": 30,
+      "frame": 398,
+      "filename": "frame_030.webp",
+      "stage": "transit",
+      "camera": "Cam_Scene2_Transit"
+    },
+    {
+      "index": 31,
+      "frame": 409,
+      "filename": "frame_031.webp",
+      "stage": "transit",
+      "camera": "Cam_Scene2_Transit"
+    },
+    {
+      "index": 32,
+      "frame": 420,
+      "filename": "frame_032.webp",
+      "stage": "transit",
+      "camera": "Cam_Scene2_Transit"
+    },
+    {
+      "index": 33,
+      "frame": 431,
+      "filename": "frame_033.webp",
+      "stage": "transit",
+      "camera": "Cam_Scene2_Transit"
+    },
+    {
+      "index": 34,
+      "frame": 442,
+      "filename": "frame_034.webp",
+      "stage": "transit",
+      "camera": "Cam_Scene2_Transit"
+    },
+    {
+      "index": 35,
+      "frame": 453,
+      "filename": "frame_035.webp",
+      "stage": "transit",
+      "camera": "Cam_Scene2_Transit"
+    },
+    {
+      "index": 36,
+      "frame": 464,
+      "filename": "frame_036.webp",
+      "stage": "transit",
+      "camera": "Cam_Scene2_Transit"
+    },
+    {
+      "index": 37,
+      "frame": 475,
+      "filename": "frame_037.webp",
+      "stage": "transit",
+      "camera": "Cam_Scene2_Transit"
+    },
+    {
+      "index": 38,
+      "frame": 486,
+      "filename": "frame_038.webp",
+      "stage": "transit",
+      "camera": "Cam_Scene2_Transit"
+    },
+    {
+      "index": 39,
+      "frame": 497,
+      "filename": "frame_039.webp",
+      "stage": "transit",
+      "camera": "Cam_Scene2_Transit"
+    },
+    {
+      "index": 40,
+      "frame": 508,
+      "filename": "frame_040.webp",
+      "stage": "transit",
+      "camera": "Cam_Scene2_Transit"
+    },
+    {
+      "index": 41,
+      "frame": 519,
+      "filename": "frame_041.webp",
+      "stage": "transit",
+      "camera": "Cam_Scene2_Transit"
+    },
+    {
+      "index": 42,
+      "frame": 530,
+      "filename": "frame_042.webp",
+      "stage": "transit",
+      "camera": "Cam_Scene2_Transit"
+    },
+    {
+      "index": 43,
+      "frame": 675,
+      "filename": "frame_043.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 44,
+      "frame": 680,
+      "filename": "frame_044.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 45,
+      "frame": 685,
+      "filename": "frame_045.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 46,
+      "frame": 690,
+      "filename": "frame_046.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 47,
+      "frame": 695,
+      "filename": "frame_047.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 48,
+      "frame": 700,
+      "filename": "frame_048.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 49,
+      "frame": 705,
+      "filename": "frame_049.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 50,
+      "frame": 710,
+      "filename": "frame_050.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 51,
+      "frame": 715,
+      "filename": "frame_051.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 52,
+      "frame": 720,
+      "filename": "frame_052.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 53,
+      "frame": 725,
+      "filename": "frame_053.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 54,
+      "frame": 730,
+      "filename": "frame_054.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 55,
+      "frame": 735,
+      "filename": "frame_055.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 56,
+      "frame": 740,
+      "filename": "frame_056.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 57,
+      "frame": 745,
+      "filename": "frame_057.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 58,
+      "frame": 750,
+      "filename": "frame_058.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 59,
+      "frame": 755,
+      "filename": "frame_059.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 60,
+      "frame": 760,
+      "filename": "frame_060.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 61,
+      "frame": 765,
+      "filename": "frame_061.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 62,
+      "frame": 770,
+      "filename": "frame_062.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 63,
+      "frame": 775,
+      "filename": "frame_063.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 64,
+      "frame": 780,
+      "filename": "frame_064.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 65,
+      "frame": 785,
+      "filename": "frame_065.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 66,
+      "frame": 790,
+      "filename": "frame_066.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 67,
+      "frame": 795,
+      "filename": "frame_067.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Landing"
+    },
+    {
+      "index": 68,
+      "frame": 800,
+      "filename": "frame_068.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Hero"
+    },
+    {
+      "index": 69,
+      "frame": 805,
+      "filename": "frame_069.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Hero"
+    },
+    {
+      "index": 70,
+      "frame": 810,
+      "filename": "frame_070.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Hero"
+    },
+    {
+      "index": 71,
+      "frame": 815,
+      "filename": "frame_071.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Hero"
+    },
+    {
+      "index": 72,
+      "frame": 820,
+      "filename": "frame_072.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Hero"
+    },
+    {
+      "index": 73,
+      "frame": 825,
+      "filename": "frame_073.webp",
+      "stage": "landing",
+      "camera": "Cam_Scene3_Hero"
+    }
+  ]
+}
