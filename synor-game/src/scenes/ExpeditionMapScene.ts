@@ -704,6 +704,11 @@ export class ExpeditionMapScene extends Phaser.Scene {
     super({ key: 'ExpeditionMapScene' });
   }
 
+  init() {
+    this.isTraversing = false;
+    this.starsEarned = 0;
+  }
+
   preload() {
     // Optional: place a NASA Mars Trek / MOLA equirectangular image at NASA_TEXTURE_PATH.
     // If the file is missing the scene silently falls back to the built-in terrain model.
@@ -713,6 +718,8 @@ export class ExpeditionMapScene extends Phaser.Scene {
   }
 
   create() {
+    this.isTraversing = false;
+    this.starsEarned = 0;
     gameState.currentLocation = 'gale';
     audioManager.playMusic(this, 'music_game', { loop: true });
     fadeSceneIn(this);
@@ -1447,11 +1454,19 @@ export class ExpeditionMapScene extends Phaser.Scene {
       .setStrokeStyle(1, 0x38bdf8)
       .setInteractive({ useHandCursor: true });
 
-    const btnTxt = this.add.text(0, 0, 'START THE ADVENTURE!', {
+    const isReturning = gameState.currentChapter === 'act_3_gale_return';
+    const isJezero = gameState.currentChapter === 'act_4_jezero';
+    const initialLabel = isReturning
+      ? 'RETURN TO GALE BASE'
+      : isJezero
+      ? 'TRAVERSE TO JEZERO'
+      : 'START THE ADVENTURE!';
+
+    const btnTxt = this.add.text(0, 0, initialLabel, {
       fontFamily: 'Orbitron, sans-serif',
-      fontSize: '12px',
+      fontSize: '11px',
       color: '#ffffff'
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
     btnBg.on('pointerover', () => {
       btnBg.setFillStyle(0x0369a1);
@@ -1462,10 +1477,13 @@ export class ExpeditionMapScene extends Phaser.Scene {
       btnBg.setFillStyle(0x0284c7);
     });
 
-    btnBg.on('pointerdown', () => {
+    const triggerTraverse = () => {
       audioManager.playSfx(this, 'sfx_ui_click', { volume: 0.7 });
       this.commenceTraverse(btnBg, btnTxt);
-    });
+    };
+
+    btnBg.on('pointerdown', triggerTraverse);
+    btnTxt.on('pointerdown', triggerTraverse);
 
     attachUIInteraction(this, btnBg, {
       colorTarget: btnBg,
@@ -1738,6 +1756,9 @@ export class ExpeditionMapScene extends Phaser.Scene {
         const remDistance = Math.round(this.totalDistanceKm * (1 - wp.fraction));
         this.distanceText.setText(`SPHERICAL DISTANCE:\n${remDistance} km remaining`);
 
+        // Steady rover motor power draw while traversing Martian terrain (~9% for whole journey)
+        gameState.resources.power = Math.max(25, gameState.resources.power - 0.35);
+
         // Sound blip
         soundFx.playClick(600 + idx * 40);
         idx++;
@@ -1752,28 +1773,41 @@ export class ExpeditionMapScene extends Phaser.Scene {
   private onTraverseComplete(btnBg: Phaser.GameObjects.Rectangle, btnTxt: Phaser.GameObjects.Text) {
     audioManager.playSfx(this, 'sfx_ui_confirm', { volume: 0.85 });
     btnBg.setFillStyle(0x10b981);
-    btnTxt.setText('WE MADE IT! EXPLORE');
+
+    const isReturning = gameState.currentChapter === 'act_3_gale_return';
+    const isJezero = gameState.currentChapter === 'act_4_jezero';
+    const completeLabel = isReturning
+      ? 'ARRIVED! ENTER GALE BASE'
+      : isJezero
+      ? 'ARRIVED! ENTER JEZERO'
+      : 'ARRIVED! EXPLORE ARCADIA';
+    btnTxt.setText(completeLabel);
+
     this.drawProgress(1);
-    this.say('We made it!', 4000);
+    this.say(isReturning ? 'Welcome home to Gale!' : 'We made it!', 4000);
     this.confetti(this.roverSprite.x, this.roverSprite.y);
 
     btnBg.off('pointerdown');
-    btnBg.on('pointerdown', () => {
+    btnTxt.off('pointerdown');
+
+    const finishTraverse = () => {
       audioManager.playSfx(this, 'sfx_ui_click', { volume: 0.8 });
+      this.isTraversing = false;
+
       if (gameState.currentChapter === 'act_2_arcadia') {
         gameState.currentLocation = 'arcadia';
-        this.cameras.main.zoomTo(1.15, 350, 'Sine.easeInOut');
-        transitionToScene(this, 'ArcadiaFieldScene');
+        this.scene.start('ArcadiaFieldScene');
       } else if (gameState.currentChapter === 'act_3_gale_return') {
         gameState.currentLocation = 'gale';
-        this.cameras.main.zoomTo(1.15, 350, 'Sine.easeInOut');
-        transitionToScene(this, 'GaleBaseScene');
+        this.scene.start('GaleBaseScene');
       } else {
         // Act IV Jezero
         gameState.currentLocation = 'jezero';
-        this.cameras.main.zoomTo(1.15, 350, 'Sine.easeInOut');
-        transitionToScene(this, 'JezeroFieldScene');
+        this.scene.start('JezeroFieldScene');
       }
-    });
+    };
+
+    btnBg.on('pointerdown', finishTraverse);
+    btnTxt.on('pointerdown', finishTraverse);
   }
 }
